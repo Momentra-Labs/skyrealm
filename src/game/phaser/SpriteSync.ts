@@ -3,6 +3,7 @@ import { GameState, ProjectileKind } from '../../types/game.ts';
 import type { Pose } from '../../assets/assetManifest.ts';
 import { hoverDrift, leanTilt, squashScale, wingBeat } from '../cartoon.ts';
 import type { Bullet } from '../Bullet.ts';
+import { SIDEKICK_FLARE } from '../Sidekick.ts';
 import { BODY } from '../constants.ts';
 import { EMBER_ASTEROID, FROST_HAIL } from '../content/hazards.ts';
 import type { HazardStyle } from '../content/hazards.ts';
@@ -22,8 +23,8 @@ const VIEW = {
   enemy: 7.0,
   boss: 4.7,
   bossMax: 290,
-  rock: 6.1,
-  hail: 7.2,
+  rock: 3.8,
+  hail: 4.2,
   pickup: 58,
   token: 78,
   coin: 6.3,
@@ -31,6 +32,19 @@ const VIEW = {
   enemyShot: 28,
   particle: 3.8,
 };
+
+/** Seconds a foe takes to pop in, and the wind-up window before it fires. */
+const SPAWN_POP = 0.24;
+const WINDUP = 0.34;
+/** hitFlash runs 0.08s per hit; only its first frames flash white. */
+const HIT_WHITE = 0.05;
+
+function popIn(t: number): number {
+  // easeOutBack: overshoots to ~1.1 then settles.
+  const c = 1.9;
+  const u = t - 1;
+  return Math.max(0.2, 1 + (c + 1) * u * u * u + c * u * u);
+}
 
 const DEPTH = {
   wake: 8,
@@ -88,6 +102,7 @@ export class SpriteSync {
   private readonly floats: TextPool;
   private readonly player: Phaser.GameObjects.Image;
   private readonly aura: Phaser.GameObjects.Graphics;
+  private readonly threatCues: Phaser.GameObjects.Graphics;
   private readonly wingL: Phaser.GameObjects.Image;
   private readonly wingR: Phaser.GameObjects.Image;
   private readonly cloneA: Phaser.GameObjects.Image;
@@ -116,13 +131,14 @@ export class SpriteSync {
     this.floats = new TextPool(scene, DEPTH.float);
     this.player = scene.add.image(0, 0, 'dot').setDepth(DEPTH.player).setVisible(false);
     this.aura = scene.add.graphics().setDepth(DEPTH.aura);
+    this.threatCues = scene.add.graphics().setDepth(DEPTH.boss + 1);
     this.wingL = scene.add.image(0, 0, 'dot').setDepth(DEPTH.wing).setVisible(false);
     this.wingR = scene.add.image(0, 0, 'dot').setDepth(DEPTH.wing).setVisible(false);
     this.cloneA = scene.add.image(0, 0, 'dot').setDepth(DEPTH.wing).setVisible(false);
     this.cloneB = scene.add.image(0, 0, 'dot').setDepth(DEPTH.wing).setVisible(false);
     this.boss = scene.add.image(0, 0, 'dot').setDepth(DEPTH.boss).setVisible(false);
     this.banner = scene.add
-      .text(270, 120, '', {
+      .text(270, 280, '', {
         fontFamily: "Cinzel, Palatino, serif",
         fontSize: '26px',
         fontStyle: '900',
@@ -139,6 +155,7 @@ export class SpriteSync {
     const e = this.engine;
     this.casts.length = 0;
     this.beats.length = 0;
+    this.threatCues.clear();
     this.fireWakes.sync(e.asteroids, (img, rock) => {
       placeWake(img, this.bank, 'fire', rock, rock.radius, rock.age, EMBER_ASTEROID);
     });
@@ -146,45 +163,59 @@ export class SpriteSync {
       placeWake(img, this.bank, 'frost', hail, hail.radius, hail.age, FROST_HAIL);
     });
     this.rocks.sync(e.asteroids, (img, rock, i) => {
-      place(img, this.bank, this.bank.asteroid(), rock.x, rock.y, rock.radius * VIEW.rock, { rot: rock.rotation });
-      e.vfx.hazardTrail(rock.x, rock.y, rock.vx, rock.vy, rock.age, i, EMBER_ASTEROID, rock.size + 1);
+      place(img, this.bank, this.bank.asteroid(rock.size), rock.x, rock.y, rock.radius * VIEW.rock, { rot: rock.rotation });
+      if (e.state !== GameState.PAUSED) e.vfx.hazardTrail(rock.x, rock.y, rock.vx, rock.vy, rock.age, i, EMBER_ASTEROID, rock.size + 1);
     });
     this.hailstones.sync(e.hailstones, (img, hail, i) => {
-      place(img, this.bank, this.bank.hail(), hail.x, hail.y, hail.radius * VIEW.hail, {
+      place(img, this.bank, this.bank.hail(hail.variant), hail.x, hail.y, hail.radius * VIEW.hail, {
         rot: hail.age * hail.spin,
       });
-      e.vfx.hazardTrail(hail.x, hail.y, hail.vx, hail.vy, hail.age, i, FROST_HAIL, 2);
+      if (e.state !== GameState.PAUSED) e.vfx.hazardTrail(hail.x, hail.y, hail.vx, hail.vy, hail.age, i, FROST_HAIL, 2);
     });
     this.foes.sync(e.enemies, (img, foe) => {
       const bob = Math.sin(foe.age * 8 + foe.phase) * 5;
-      const flap = 1 + Math.sin(foe.age * 12 + foe.phase) * 0.14;
-      const breathe = 1 + Math.sin(foe.age * 5 + foe.phase) * 0.06;
-      const tilt = Math.sin(foe.age * 2.4 + foe.phase) * 0.12;
+      const flap = 1 + Math.sin(foe.age * 12 + foe.phase) * 0.045;
+      const breathe = 1 + Math.sin(foe.age * 5 + foe.phase) * 0.025;
+      const tilt = Math.sin(foe.age * 2.4 + foe.phase) * 0.055;
       const scale = squashScale(foe.hitFlash, foe.vx);
+      // Pop in on spawn with a little overshoot rather than appearing whole.
+      const pop = foe.age < SPAWN_POP ? popIn(foe.age / SPAWN_POP) : 1;
+      // Wind-up: a small swell and an independent warning at the muzzle.
+      // Keeping the warning separate lets it survive the white hit flash.
+      const windup = !foe.ally && foe.fireCd > 0 && foe.fireCd < WINDUP ? 1 - foe.fireCd / WINDUP : 0;
+      const swell = 1 + windup * 0.12;
       const size = foe.radius * VIEW.enemy;
-      place(img, this.bank, this.bank.enemy(foe.type), foe.x, foe.y + bob, size, {
+      const key = windup > 0 ? this.bank.enemyWindup(foe.type) : this.bank.enemy(foe.type);
+      place(img, this.bank, key, foe.x, foe.y + bob, size * pop * swell, {
         rot: tilt,
         sx: scale.sx * breathe,
         sy: scale.sy * flap,
-        alpha: foe.hitFlash > 0 ? 0.7 : 1,
-        tint: foe.hitFlash > 0 ? 0xffcccc : 0xffffff,
+        alpha: Math.min(1, foe.age / (SPAWN_POP * 0.6)),
+        // A crisp white flash on the first frames of each hit.
+        fill: foe.hitFlash > HIT_WHITE ? 0xffffff : undefined,
       });
+      if (windup > 0) chargeCue(this.threatCues, foe.x, foe.y + bob + size * 0.32, windup, 10);
       this.casts.push({ x: foe.x, y: foe.y + bob + size * 0.38, size });
     });
     if (e.boss) {
       const b = e.boss;
       const scale = squashScale(b.hitFlash, b.vy);
       const bob = Math.sin(b.age * 4) * 5;
-      const pulse = 1 + Math.sin(b.age * 6) * 0.08;
-      const tilt = Math.sin(b.age * 1.6) * 0.08;
+      const pulse = 1 + Math.sin(b.age * 6) * 0.025;
+      const tilt = Math.sin(b.age * 1.6) * 0.035;
       const pose: Pose = !b.alive ? 'death' : b.hitFlash > 0 ? 'hit' : b.fireCd < 0.2 ? 'attack' : 'idle';
       const size = Math.min(VIEW.bossMax, b.radius * VIEW.boss);
-      place(this.boss, this.bank, this.bank.boss(b.kind, pose), b.x, b.y + bob, size, {
+      // Gentle hit tint preserves the boss silhouette during sustained fire;
+      // the separate charge marker stays visible above it.
+      const shown: Pose = pose === 'hit' ? (b.fireCd < 0.2 ? 'attack' : 'idle') : pose;
+      place(this.boss, this.bank, this.bank.boss(b.kind, shown), b.x, b.y + bob, size, {
         rot: tilt,
         sx: scale.sx * pulse,
         sy: scale.sy * pulse,
-        alpha: b.hitFlash > 0 ? 0.65 : 1,
+        tint: b.hitFlash > HIT_WHITE ? 0xffe2e2 : undefined,
       });
+      const charge = b.alive && b.intro <= 0 && b.fireCd > 0 && b.fireCd < WINDUP ? 1 - b.fireCd / WINDUP : 0;
+      if (charge > 0) chargeCue(this.threatCues, b.x, b.y + bob + size * 0.3, charge, 19);
       this.casts.push({ x: b.x, y: b.y + bob + size * 0.36, size });
     } else {
       this.boss.setVisible(false);
@@ -193,7 +224,7 @@ export class SpriteSync {
     // a shot tells you where it came from as well as where it is headed.
     this.eWakes.sync(e.enemyShots, (img, shot) => {
       const back = Math.atan2(-shot.vy, -shot.vx);
-      const len = enemyShotSize(shot) * 1.3;
+      const len = enemyShotSize(shot) * 1.65;
       const key = this.bank.monsterWake(shot.element);
       place(img, this.bank, key, shot.x + Math.cos(back) * len * 0.5, shot.y + Math.sin(back) * len * 0.5, len, {
         rot: back,
@@ -227,13 +258,13 @@ export class SpriteSync {
         return;
       }
       const back = Math.atan2(-bullet.vy, -bullet.vx);
-      const len = bulletSize(bullet) * (spell ? 1.6 : 1.15);
+      const len = bulletSize(bullet) * (spell ? 2 : 1.65);
       const key = spell ? this.bank.spellWake(bullet.element) : this.bank.guardianWake(bullet.guardian!);
       place(img, this.bank, key, bullet.x + Math.cos(back) * len * 0.5, bullet.y + Math.sin(back) * len * 0.5, len, {
         rot: back,
         sx: 1 + Math.sin(bullet.life * 40) * 0.1,
-        sy: (spell ? 0.62 : 0.44) + Math.sin(bullet.life * 29 + 1.1) * 0.08,
-        alpha: (spell ? 0.7 : 0.46) + Math.sin(bullet.life * 47) * 0.14,
+        sy: (spell ? 0.38 : 0.24) + Math.sin(bullet.life * 29 + 1.1) * 0.04,
+        alpha: (spell ? 0.72 : 0.6) + Math.sin(bullet.life * 47) * 0.08,
       });
     });
     this.bullets.sync(e.bullets, (img, bullet, i) => {
@@ -318,7 +349,15 @@ export class SpriteSync {
 
   private syncWing(
     img: Phaser.GameObjects.Image,
-    wing: { unit: { species: string } | null; x: number; y: number; vx: number; slot: number; age: number },
+    wing: {
+      unit: { species: string } | null;
+      x: number;
+      y: number;
+      vx: number;
+      slot: number;
+      age: number;
+      fireFlash: number;
+    },
     show: boolean,
     alpha: number,
   ): void {
@@ -327,29 +366,31 @@ export class SpriteSync {
       return;
     }
     const size = wing.slot >= 2 ? VIEW.wingClone : VIEW.wing;
-    // Companion art is grounded creatures with their feet planted, so they get
-    // a wide slow float and a roll rather than the wing beat the guardians use:
-    // a planted animal never leans, and the lean is what breaks that read.
-    const pump = wingBeat(wing.age, 3.4);
+    // Offset the wingbeats so a pair feels like two independently flying pets.
+    const pump = wingBeat(wing.age + wing.slot * 0.37, 6.2 + wing.slot * 0.4);
     const drift = hoverDrift(wing.age, wing.slot * 1.9);
     const sway = drift.x * 3.2;
     const bob = drift.y * 3.6 - pump * 1.6;
     const element = SPECIES_META[wing.unit.species as keyof typeof SPECIES_META]?.element;
     const tint = hexToTint(element ? ELEMENT_COLOR[element] : '#ffffff');
+    const flare = wing.fireFlash / SIDEKICK_FLARE;
     this.beats.push({
-      key: this.bank.hoverLift(),
-      x: wing.x + sway * 0.6,
-      y: wing.y + bob + size * 0.42,
-      span: size * 0.92,
-      sx: 1 + pump * 0.14,
-      sy: 0.8 + pump * 0.34,
-      alpha: (0.3 + pump * 0.22) * alpha,
+      key: this.bank.wingBlur(),
+      x: wing.x + sway,
+      y: wing.y + bob - size * 0.08,
+      span: size * (1.08 + flare * 0.12),
+      sx: 1 - pump * 0.08,
+      sy: 0.45 + pump * 0.55,
+      alpha: (0.12 + pump * 0.14 + flare * 0.3) * alpha,
       tint,
     });
-    place(img, this.bank, this.bank.aether(wing.unit.species), wing.x + sway, wing.y + bob, size, {
+    // Each shot flares the companion in its element glow with a small kick,
+    // so you can see who fired what without reading the projectiles.
+    const key = flare > 0 ? this.bank.aetherCast(wing.unit.species) : this.bank.aether(wing.unit.species);
+    place(img, this.bank, key, wing.x + sway, wing.y + bob + flare * 3, size * (1 + flare * 0.06), {
       rot: leanTilt(wing.vx) + drift.x * 0.1,
-      sx: 1,
-      sy: 1 + pump * 0.04,
+      sx: 1 + pump * 0.025,
+      sy: 1 + pump * 0.025 - flare * 0.025,
       alpha,
     });
     // Same reasoning as the hero: the shadow sits far below on the clouds.
@@ -376,6 +417,8 @@ export class SpriteSync {
     const sway = drift.x * 1.9;
     const bob = drift.y * 2.2 - beat * 2.6;
     const scale = squashScale(p.hitFlash, p.vx);
+    const sinceShot = 1 / p.currentFireRate() - p.fireCooldown;
+    const cast = p.fireCooldown > 0 ? Math.max(0, 1 - sinceShot / 0.085) : 0;
     const pose: Pose = p.hitFlash > 0 ? 'hit' : p.rushTime > 0 ? 'ability' : 'idle';
     const blink = p.invuln > 0 && Math.floor(p.invuln * 16) % 2 === 0;
     const paint = GUARDIAN_COLORS[p.guardian];
@@ -391,11 +434,12 @@ export class SpriteSync {
       alpha: 0.26 + beat * 0.34,
       tint: hexToTint(paint.wing),
     });
-    place(this.player, this.bank, this.bank.guardian(p.guardian, pose), p.x + sway, p.y + bob, VIEW.player, {
+    place(this.player, this.bank, this.bank.guardian(p.guardian, pose), p.x + sway, p.y + bob + cast * 1.8, VIEW.player, {
       rot: leanTilt(p.vx) + drift.x * 0.024,
-      sx: scale.sx,
-      sy: scale.sy * (1 + beat * 0.05),
+      sx: scale.sx * (1 + beat * 0.018),
+      sy: scale.sy * (1 + beat * 0.025 - cast * 0.018),
       alpha: blink ? 0.45 : 1,
+      fill: p.hitFlash > 0.12 ? 0xfff2d9 : undefined,
     });
     // Her shadow belongs on the clouds well below her, not under her feet. A
     // contact shadow at the hem is what made her read as standing on a floor.
@@ -546,7 +590,7 @@ function place(
   x: number,
   y: number,
   size: number,
-  opts: { rot?: number; alpha?: number; tint?: number; sx?: number; sy?: number } = {},
+  opts: { rot?: number; alpha?: number; tint?: number; fill?: number; sx?: number; sy?: number } = {},
 ): void {
   img.setVisible(true);
   if (img.texture.key !== key) img.setTexture(key);
@@ -555,7 +599,8 @@ function place(
   img.setDisplaySize(frame * (opts.sx ?? 1), frame * (opts.sy ?? 1));
   img.setRotation(opts.rot ?? 0);
   img.setAlpha(opts.alpha ?? 1);
-  if (opts.tint !== undefined) img.setTint(opts.tint);
+  if (opts.fill !== undefined) img.setTintFill(opts.fill);
+  else if (opts.tint !== undefined) img.setTint(opts.tint);
   else img.clearTint();
 }
 
@@ -606,4 +651,15 @@ function enemyShotSize(shot: { radius: number }): number {
 function ring(g: Phaser.GameObjects.Graphics, radius: number, color: number, alpha: number, width: number): void {
   g.lineStyle(width, color, alpha);
   g.strokeCircle(0, 0, radius);
+}
+
+/** Shrinking coral target and downward chevron announce an imminent shot. */
+function chargeCue(g: Phaser.GameObjects.Graphics, x: number, y: number, charge: number, size: number): void {
+  const radius = size * (1.5 - charge * 0.55);
+  g.lineStyle(2.5, 0xff5367, 0.55 + charge * 0.45);
+  g.strokeCircle(x, y, radius);
+  g.lineStyle(1.5, 0xffe3b5, charge);
+  g.strokeCircle(x, y, radius * 0.55);
+  g.fillStyle(0xff5367, 0.65 + charge * 0.35);
+  g.fillTriangle(x - 4, y + radius + 3, x + 4, y + radius + 3, x, y + radius + 9);
 }

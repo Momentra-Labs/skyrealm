@@ -1,5 +1,5 @@
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from './constants.ts';
-import { randRange } from '../utils/random.ts';
+import { randRange, randInt } from '../utils/random.ts';
 import { drawFrostWind, drawHailstone } from './fantasyDraw.ts';
 import { FROST_HAIL } from './content/hazards.ts';
 
@@ -12,6 +12,7 @@ export class Hailstone {
   health = 12;
   age = 0;
   spin = 0;
+  variant: 0 | 1 | 2 = 0;
 
   spawn(x?: number, y?: number): void {
     this.x = x ?? randRange(40, LOGICAL_WIDTH - 40);
@@ -21,6 +22,7 @@ export class Hailstone {
     this.radius = 9;
     this.health = 12;
     this.age = 0;
+    this.variant = randInt(0, 2) as 0 | 1 | 2;
     // A round stone can tumble freely, so it spins livelier than a shard could.
     this.spin = randRange(-2.6, 2.6);
   }

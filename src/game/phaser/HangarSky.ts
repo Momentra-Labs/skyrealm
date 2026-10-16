@@ -5,16 +5,12 @@ import type { TextureBank } from './TextureBank.ts';
 
 const DEPTH = 6;
 
-const ISLES = [
-  { x: 86, y: 708, size: 96, phase: 0.2 },
-  { x: 458, y: 764, size: 82, phase: 1.1 },
-  { x: 168, y: 848, size: 74, phase: 2.0 },
-] as const;
-
+// Painted clouds drift along the edges of the menu sky, framing the hero.
 const CLOUDS = [
-  { x: 110, y: 168, size: 124, phase: 0.4, span: 34 },
-  { x: 410, y: 228, size: 110, phase: 1.6, span: 26 },
-  { x: 74, y: 318, size: 98, phase: 2.4, span: 22 },
+  { x: 70, y: 190, size: 230, phase: 0.4, span: 26, art: 'a' },
+  { x: 480, y: 300, size: 210, phase: 1.6, span: 20, art: 'b' },
+  { x: 40, y: 640, size: 250, phase: 2.4, span: 18, art: 'b' },
+  { x: 500, y: 780, size: 240, phase: 3.1, span: 22, art: 'a' },
 ] as const;
 
 const BIRDS = [
@@ -31,7 +27,6 @@ const LANTERNS = [
 export class HangarSky {
   private readonly engine: GameEngine;
   private readonly bank: TextureBank;
-  private readonly isles: Phaser.GameObjects.Image[];
   private readonly clouds: Phaser.GameObjects.Image[];
   private readonly birds: Phaser.GameObjects.Image[];
   private readonly lanterns: Phaser.GameObjects.Image[];
@@ -41,7 +36,6 @@ export class HangarSky {
     this.engine = engine;
     this.bank = bank;
     this.still = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.isles = ISLES.map(() => make(scene));
     this.clouds = CLOUDS.map(() => make(scene));
     this.birds = BIRDS.map(() => make(scene));
     this.lanterns = LANTERNS.map(() => make(scene));
@@ -49,22 +43,16 @@ export class HangarSky {
 
   sync(): void {
     if (this.engine.state !== GameState.MENU) {
-      hideAll(this.isles, this.clouds, this.birds, this.lanterns);
+      hideAll(this.clouds, this.birds, this.lanterns);
       return;
     }
     const age = this.engine.starfield.time;
     const motion = this.still ? 0 : 1;
-    for (let i = 0; i < ISLES.length; i++) {
-      const spec = ISLES[i]!;
-      const bob = Math.sin(age * 0.7 + spec.phase) * 7 * motion;
-      const drift = Math.cos(age * 0.28 + spec.phase) * 6 * motion;
-      place(this.isles[i]!, this.bank, this.bank.hangar('isle'), spec.x + drift, spec.y + bob, spec.size);
-    }
     for (let i = 0; i < CLOUDS.length; i++) {
       const spec = CLOUDS[i]!;
       const drift = Math.sin(age * 0.22 + spec.phase) * spec.span * motion;
       const breathe = 1 + Math.sin(age * 0.9 + spec.phase) * 0.06 * motion;
-      place(this.clouds[i]!, this.bank, this.bank.hangar('cloud'), spec.x + drift, spec.y, spec.size, breathe, 0.92);
+      place(this.clouds[i]!, this.bank, this.bank.paintedCloud(spec.art), spec.x + drift, spec.y, spec.size, breathe, breathe, 0.92);
     }
     for (let i = 0; i < BIRDS.length; i++) {
       const spec = BIRDS[i]!;
@@ -107,11 +95,15 @@ function place(
   size: number,
   sx = 1,
   sy = 1,
+  alpha = 1,
 ): void {
   img.setVisible(true);
   if (img.texture.key !== key) img.setTexture(key);
   img.setPosition(x, y);
   const frame = bank.frame(key, size);
-  img.setDisplaySize(frame * sx, frame * sy);
-  img.setAlpha(1);
+  // Painted art keeps its own aspect; baked canvases are square.
+  const src = img.texture.getSourceImage() as { width: number; height: number };
+  const aspect = src.height / Math.max(1, src.width);
+  img.setDisplaySize(frame * sx, frame * sy * aspect);
+  img.setAlpha(alpha);
 }

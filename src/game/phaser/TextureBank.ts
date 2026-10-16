@@ -14,7 +14,9 @@ import {
   enemyPath,
   envPath,
   guardianPath,
+  hazardPath,
   powerUpAssets,
+  uiAssets,
 } from '../../assets/assetManifest.ts';
 import type { Pose as PoseT } from '../../assets/assetManifest.ts';
 import type { CoinFace } from '../fantasyDraw.ts';
@@ -65,6 +67,7 @@ export class TextureBank {
   private readonly wanted = new Map<string, string>();
   private readonly queue: { key: string; bake: BakeFn }[] = [];
   private readonly queued = new Set<string>();
+  private readonly requested = new Set<string>();
   private lastProgress = -1;
   private shared = false;
 
@@ -103,9 +106,20 @@ export class TextureBank {
     return this.best(`a:${id}`, 'dot');
   }
 
+  /** Casting uses the same art; SpriteSync supplies the elemental flare. */
+  aetherCast(id: string): string {
+    return this.aether(id);
+  }
+
   enemy(id: string): string {
     this.ensureEnemy(id);
     return this.best(`e:${id}`, 'dot');
+  }
+
+  /** Wind-up keeps the body art stable while SpriteSync draws its charge cue. */
+  enemyWindup(id: string): string {
+    // The charge marker is drawn at runtime so hits cannot hide its warning.
+    return this.enemy(id);
   }
 
   boss(id: string, pose: PoseT): string {
@@ -157,12 +171,20 @@ export class TextureBank {
     return this.best(`mw:${element}:v1`, 'dot');
   }
 
-  asteroid(): string {
-    return this.best('rock:burn:v1', 'dot');
+  asteroid(size: 1 | 2 | 3 = 2): string {
+    const key = `hazard:magma:${size}`;
+    const url = hazardPath('magma', (size - 1) as 0 | 1 | 2);
+    this.request(url);
+    this.wantPng(key, url);
+    return this.best(key, 'rock:burn:v1');
   }
 
-  hail(): string {
-    return this.best('hail:v1', 'dot');
+  hail(variant: 0 | 1 | 2 = 0): string {
+    const key = `hazard:ice:${variant}`;
+    const url = hazardPath('ice', variant);
+    this.request(url);
+    this.wantPng(key, url);
+    return this.best(key, 'hail:v1');
   }
 
   /** Motion smear laid behind a flyer's wings, tinted by the caller. */
@@ -201,9 +223,26 @@ export class TextureBank {
     return this.best(`hangar:${kind}`, 'dot');
   }
 
+  /** Painted menu cloud; the procedural one stands in until it loads. */
+  paintedCloud(which: 'a' | 'b'): string {
+    const url = which === 'a' ? uiAssets.cloudA : uiAssets.cloudB;
+    this.request(url);
+    this.wantPng(`cloud:${which}`, url);
+    return this.pick(`cloud:${which}`) ?? this.hangar('cloud');
+  }
+
   env(world: string, layer: 'bg' | 'mid' | 'fg'): string | null {
-    this.wantPng(`env:${world}:${layer}`, envPath(world as WorldId, layer));
+    const url = envPath(world as WorldId, layer);
+    this.request(url);
+    this.wantPng(`env:${world}:${layer}`, url);
     return this.pick(`env:${world}:${layer}`);
+  }
+
+  /** Kick off a load for art the scene wants but nobody has asked for yet. */
+  private request(url: string): void {
+    if (this.requested.has(url)) return;
+    this.requested.add(url);
+    if (!assets.has(url)) void assets.load([url]);
   }
 
   plate(world: string): string {
@@ -341,59 +380,12 @@ export class TextureBank {
       this.addCanvas(`c:${tier}:v3`, 72, (ctx) => drawGoldCoin(ctx, r, tier), 40);
       this.addCanvas(`ce:${tier}:v3`, 72, (ctx) => drawCoinEdge(ctx, r, tier), 40);
     }
-    this.addCanvas(
-      'pt:star',
-      32,
-      (ctx) => {
-        ctx.fillStyle = '#fff6d0';
-        ctx.beginPath();
-        for (let i = 0; i < 8; i++) {
-          const a = (Math.PI / 4) * i;
-          const r = i % 2 === 0 ? 14 : 5.5;
-          const px = Math.cos(a) * r;
-          const py = Math.sin(a) * r;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.fill();
-      },
-      28,
-    );
-    this.addCanvas(
-      'pt:puff',
-      32,
-      (ctx) => {
-        ctx.fillStyle = '#fff6e8';
-        ctx.beginPath();
-        ctx.arc(0, 0, 12, 0, Math.PI * 2);
-        ctx.fill();
-      },
-      24,
-    );
-    this.addCanvas(
-      'pt:ring',
-      64,
-      (ctx) => {
-        ctx.strokeStyle = '#fffaf0';
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.arc(0, 0, 26, 0, Math.PI * 2);
-        ctx.stroke();
-      },
-      57,
-    );
-    this.addCanvas(
-      'pt:streak',
-      48,
-      (ctx) => {
-        ctx.fillStyle = '#fffaf0';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 22, 4.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-      },
-      44,
-    );
+    // Particles are soft and glowing rather than flat discs: a bright core
+    // that falls off to nothing, so bursts read as light, not confetti.
+    this.addCanvas('pt:star', 48, (ctx) => drawSparkle(ctx, 20), 28);
+    this.addCanvas('pt:puff', 40, (ctx) => drawMote(ctx, 17), 24);
+    this.addCanvas('pt:ring', 80, (ctx) => drawGlowRing(ctx, 28), 57);
+    this.addCanvas('pt:streak', 64, (ctx) => drawStreak(ctx, 28), 44);
     this.addCanvas('plume:fire:v1', 176, (ctx) => drawFlamePlume(ctx, 164, EMBER_ASTEROID), 164);
     this.addCanvas('plume:frost:v1', 176, (ctx) => drawFrostWind(ctx, 164, FROST_HAIL), 164);
     for (const id of Object.values(PowerUpType)) {
@@ -423,8 +415,7 @@ export class TextureBank {
       this.fromPng.add(png);
       return;
     }
-    if (key.startsWith('env:')) this.textures.addCanvas(png, fadeEnvSeams(img));
-    else if (img instanceof HTMLCanvasElement) this.textures.addCanvas(png, img);
+    if (img instanceof HTMLCanvasElement) this.textures.addCanvas(png, img);
     else this.textures.addImage(png, img);
     this.fromPng.add(png);
   }
@@ -448,28 +439,54 @@ export class TextureBank {
   }
 }
 
-function fadeEnvSeams(img: HTMLImageElement | HTMLCanvasElement): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  const w = 'naturalWidth' in img ? img.naturalWidth || img.width : img.width;
-  const h = 'naturalHeight' in img ? img.naturalHeight || img.height : img.height;
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-  ctx.drawImage(img, 0, 0, w, h);
-  const fade = Math.min(96, Math.round(h * 0.12));
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  const top = ctx.createLinearGradient(0, 0, 0, fade);
-  top.addColorStop(0, 'rgba(0,0,0,1)');
-  top.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = top;
-  ctx.fillRect(0, 0, w, fade);
-  const bot = ctx.createLinearGradient(0, h - fade, 0, h);
-  bot.addColorStop(0, 'rgba(0,0,0,0)');
-  bot.addColorStop(1, 'rgba(0,0,0,1)');
-  ctx.fillStyle = bot;
-  ctx.fillRect(0, h - fade, w, fade);
-  ctx.restore();
-  return canvas;
+function drawMote(ctx: CanvasRenderingContext2D, r: number): void {
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.7, 'rgba(255,255,255,0.32)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSparkle(ctx: CanvasRenderingContext2D, r: number): void {
+  drawMote(ctx, r * 0.55);
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI / 4) * i - Math.PI / 2;
+    const rr = i % 2 === 0 ? r : r * 0.18;
+    const x = Math.cos(a) * rr;
+    const y = Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawGlowRing(ctx: CanvasRenderingContext2D, r: number): void {
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawStreak(ctx: CanvasRenderingContext2D, len: number): void {
+  const g = ctx.createLinearGradient(-len, 0, len, 0);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.7, 'rgba(255,255,255,0.85)');
+  g.addColorStop(1, 'rgba(255,255,255,1)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, len, 4.4, 0, 0, Math.PI * 2);
+  ctx.fill();
 }

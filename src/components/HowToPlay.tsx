@@ -14,7 +14,7 @@ export function HowToPlay({ onBack, onPop }: Props) {
         <div className="how-grid">
           <section>
             <h3>FLY</h3>
-            <p>On a phone, use the joystick to move. Your Guardian auto-fires upward. WASD or arrows also work. E spends special energy. P pauses. Settings lets you put the pad on the left or right.</p>
+            <p>Drag anywhere in the sky to move. Your Guardian auto-fires upward. WASD or arrows also work. E spends special energy. P pauses. On touch screens, your guardian stays above your finger.</p>
           </section>
           <section>
             <h3>AETHERLINGS</h3>
@@ -34,7 +34,7 @@ export function HowToPlay({ onBack, onPop }: Props) {
           </section>
           <section>
             <h3>ART</h3>
-            <p>Guardians, Aetherlings, foes, and skies are original canvas drawings — chibi fairies and familiars, not imported sprites.</p>
+            <p>Original fantasy guardians, companions, monsters, and realms bring every flight to life.</p>
           </section>
         </div>
         <button type="button" className="ns-btn ns-btn-primary" onClick={onBack}>

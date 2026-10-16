@@ -2166,7 +2166,7 @@ function tongue(
  */
 export function drawFlamePlume(ctx: CanvasRenderingContext2D, length: number, style: HazardStyle): void {
   const half = length * 0.5;
-  const w = length * 0.19;
+  const w = length * 0.13;
   ctx.save();
 
   // Soot as overlapping soft puffs; hard-edged shapes read as grey cardboard
@@ -2177,7 +2177,7 @@ export function drawFlamePlume(ctx: CanvasRenderingContext2D, length: number, st
     const cr = w * (0.92 - t * 0.4);
     const lift = (i % 2 === 0 ? -1 : 1) * w * 0.18 * t;
     const puff = ctx.createRadialGradient(cx, lift, 0, cx, lift, cr);
-    puff.addColorStop(0, `rgba(74, 58, 52, ${0.2 - t * 0.11})`);
+    puff.addColorStop(0, `rgba(74, 58, 52, ${0.1 - t * 0.06})`);
     puff.addColorStop(1, 'rgba(74, 58, 52, 0)');
     ctx.fillStyle = puff;
     ctx.beginPath();
@@ -2187,7 +2187,12 @@ export function drawFlamePlume(ctx: CanvasRenderingContext2D, length: number, st
 
   glowAura(ctx, style.crack, length * 0.14);
   ctx.globalAlpha = 0.82;
-  ctx.fillStyle = style.crack;
+  const flame = ctx.createLinearGradient(-half, 0, half, 0);
+  flame.addColorStop(0, 'rgba(255,184,74,0.9)');
+  flame.addColorStop(0.35, 'rgba(255,103,38,0.65)');
+  flame.addColorStop(0.72, 'rgba(207,44,36,0.15)');
+  flame.addColorStop(1, 'rgba(207,44,36,0)');
+  ctx.fillStyle = flame;
   tongue(ctx, -half, half * 0.66, w, 1.08);
   ctx.fill();
   ctx.globalAlpha = 0.7;
@@ -2197,7 +2202,11 @@ export function drawFlamePlume(ctx: CanvasRenderingContext2D, length: number, st
   ctx.fill();
 
   ctx.globalAlpha = 0.95;
-  ctx.fillStyle = style.rim;
+  const core = ctx.createLinearGradient(-half, 0, half * 0.5, 0);
+  core.addColorStop(0, 'rgba(255,247,204,0.95)');
+  core.addColorStop(0.35, 'rgba(255,210,88,0.7)');
+  core.addColorStop(1, 'rgba(255,145,38,0)');
+  ctx.fillStyle = core;
   tongue(ctx, -half, half * 0.24, w * 0.6, 1.12);
   ctx.fill();
   ctx.globalAlpha = 1;
@@ -2206,7 +2215,7 @@ export function drawFlamePlume(ctx: CanvasRenderingContext2D, length: number, st
 
   // Inner licks so the body of the flame churns instead of reading as a cone.
   ctx.globalAlpha = 0.55;
-  ctx.fillStyle = style.crack;
+  ctx.fillStyle = flame;
   tongue(ctx, -half * 0.2, half * 0.5, w * 0.24, 1.25, -w * 0.62);
   ctx.fill();
   tongue(ctx, -half * 0.3, half * 0.42, w * 0.2, 1.25, w * 0.68);
@@ -2232,13 +2241,13 @@ export function drawFrostWind(ctx: CanvasRenderingContext2D, length: number, sty
   ctx.save();
 
   glowAura(ctx, style.body, length * 0.1);
-  ctx.globalAlpha = 0.26;
+  ctx.globalAlpha = 0.12;
   ctx.fillStyle = style.crack;
   tongue(ctx, -half, half * 0.8, w * 1.1, 0.92);
   ctx.fill();
   clearGlow(ctx);
 
-  ctx.globalAlpha = 0.34;
+  ctx.globalAlpha = 0.18;
   ctx.fillStyle = style.body;
   tongue(ctx, -half * 0.9, half * 0.5, w * 0.72, 1.05, -w * 0.36);
   ctx.fill();
@@ -2247,17 +2256,21 @@ export function drawFrostWind(ctx: CanvasRenderingContext2D, length: number, sty
 
   // Streamers: each starts near the shard and gets thinner downwind.
   const streaks: readonly (readonly [number, number, number, number])[] = [
-    [-0.85, 0.92, -0.1, 0.075],
-    [-0.7, 0.72, -0.62, 0.05],
-    [-0.6, 0.86, 0.55, 0.055],
-    [-0.9, 0.55, 0.95, 0.04],
-    [-0.5, 0.98, -1.0, 0.035],
+    [-0.85, 0.92, -0.1, 0.025],
+    [-0.7, 0.72, -0.62, 0.018],
+    [-0.6, 0.86, 0.55, 0.02],
+    [-0.9, 0.55, 0.95, 0.014],
+    [-0.5, 0.98, -1.0, 0.012],
   ];
   ctx.lineCap = 'round';
+  const frost = ctx.createLinearGradient(-half, 0, half, 0);
+  frost.addColorStop(0, 'rgba(232,251,255,0.8)');
+  frost.addColorStop(0.45, 'rgba(126,200,255,0.45)');
+  frost.addColorStop(1, 'rgba(126,200,255,0)');
   for (let i = 0; i < streaks.length; i++) {
     const [from, to, lane, thick] = streaks[i]!;
     ctx.globalAlpha = 0.75 - i * 0.09;
-    ctx.strokeStyle = i % 2 === 0 ? style.crack : style.rim;
+    ctx.strokeStyle = frost;
     ctx.lineWidth = length * thick;
     ctx.beginPath();
     ctx.moveTo(half * from, w * lane * 0.9);

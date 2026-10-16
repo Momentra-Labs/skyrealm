@@ -163,7 +163,7 @@ export class GameEngine {
     this.mode = mode;
     this.resetRun(raidKind);
     this.state = GameState.COUNTDOWN;
-    this.countdown = 3.2;
+    this.countdown = 0.85;
     this.countdownMark = 4;
   }
 
@@ -214,7 +214,7 @@ export class GameEngine {
     s.skyGlow = shell.glow;
     s.skyMid = shell.mid;
     s.skyGround = shell.ground;
-    s.stageTitle = this.mode === RunMode.RAID ? 'BOSS RAID' : this.mode === RunMode.TRAINING ? 'TRAINING' : 'ENDLESS SKY';
+    s.stageTitle = this.mode === RunMode.RAID ? 'BOSS RAID' : this.mode === RunMode.TRAINING ? 'TRAINING' : this.director.recovery > 0 ? 'COLLECT YOUR TREASURE' : `REALM ${this.director.stage} · ${this.boss ? 'BOSS BATTLE' : `BOSS IN ${Math.ceil(Math.max(0, this.director.bossCd))}s`}`;
     s.health = this.player.health;
     s.maxHealth = this.player.maxHealth;
     s.shield = this.player.shield;
@@ -305,7 +305,7 @@ export class GameEngine {
     if (this.state === GameState.COUNTDOWN) {
       this.countdown -= dt;
       const label = this.countdownLabel();
-      const mark = label === 'GO!' ? 0 : Number(label);
+      const mark = label === 'GO!' ? 0 : 1;
       if (mark < this.countdownMark) {
         this.countdownMark = mark;
         this.audio.play(label === 'GO!' ? 'go' : 'countdown');
@@ -480,7 +480,7 @@ export class GameEngine {
         this.summonBoss(ev.boss);
       }
     }
-    if (this.state === GameState.PLAYING) this.spawnHazards(dt);
+    if (this.state === GameState.PLAYING && this.director.recovery <= 0 && this.director.time > 6) this.spawnHazards(dt);
   }
 
   private spawnPack(type: EnemyTypeT, count: number, element: ElementId): void {
@@ -766,6 +766,10 @@ export class GameEngine {
       const aura = foeAura(e.type);
       this.particles.puff(e.x, e.y, aura);
       this.particles.burstStars(e.x, e.y, 8, aura);
+      // A white shockwave from the body's edge outward: the "pop" that tells
+      // you a foe is gone even when the screen is busy.
+      ringTo(this.particles, e.x, e.y, [255, 255, 250], e.radius * 1.3, e.radius * 3.4, 0.26);
+      ringTo(this.particles, e.x, e.y, aura, e.radius * 1.0, e.radius * 2.6, 0.34);
     }
     if (chance(e.type === EnemyType.ELITE || e.type === EnemyType.MINI_BOSS ? 0.5 : 0.18)) this.dropPower(e.x, e.y);
     this.addShard(e.element, chance(0.25) ? 1 : 0);
@@ -799,7 +803,13 @@ export class GameEngine {
       this.finishRun(true);
     } else {
       this.state = GameState.PLAYING;
-      this.banner = 'THE SKY OPENS';
+      this.director.bossDefeated();
+      this.shotPool.releaseAll(this.enemyShots);
+      this.enemyPool.releaseAll(this.enemies);
+      this.asteroidPool.releaseAll(this.asteroids);
+      this.hailPool.releaseAll(this.hailstones);
+      this.player.magnetTime = Math.max(this.player.magnetTime, 4);
+      this.banner = 'BOSS CLEARED · TREASURE RUSH';
       this.bannerLife = 2;
     }
   }
@@ -889,6 +899,9 @@ export class GameEngine {
     if (this.settings.particlesEnabled) {
       this.particles.burstStars(this.player.x, this.player.y, 40, style.particleColor);
       this.particles.puff(this.player.x, this.player.y, style.trailColor);
+      // Ends exactly on the blast radius, so the ring shows what it reached.
+      ringTo(this.particles, this.player.x, this.player.y, style.particleColor, 24, radius, 0.42);
+      ringTo(this.particles, this.player.x, this.player.y, [255, 255, 250], 16, radius * 0.82, 0.32);
     }
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i]!;
@@ -1003,9 +1016,7 @@ export class GameEngine {
 
   private countdownLabel(): string {
     if (this.state !== GameState.COUNTDOWN) return '';
-    if (this.countdown > 2.2) return '3';
-    if (this.countdown > 1.2) return '2';
-    if (this.countdown > 0.35) return '1';
+    if (this.countdown > 0.35) return 'READY';
     return 'GO!';
   }
 
@@ -1146,4 +1157,24 @@ function emptySnapshot(): GameSnapshot {
     resupplyLine: '',
     warpIn: 0,
   };
+}
+
+/**
+ * Screen radius of the baked ring per unit of particle size: the texture's ring
+ * sits at 28/80 of a canvas drawn at size * 3.8 * (80 / 57) (see TextureBank).
+ */
+const RING_PER_SIZE = 3.8 * (80 / 57) * (28 / 80);
+
+/** Shockwave ring that grows from radius `from` to `to` (px) over `life` s. */
+function ringTo(
+  particles: ParticleSystem,
+  x: number,
+  y: number,
+  color: readonly [number, number, number],
+  from: number,
+  to: number,
+  life: number,
+): void {
+  const s0 = from / RING_PER_SIZE;
+  particles.ringFlash(x, y, color, s0, (to / RING_PER_SIZE - s0) / life, life);
 }

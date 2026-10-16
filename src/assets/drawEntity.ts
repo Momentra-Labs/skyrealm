@@ -17,6 +17,7 @@ export function drawAetherSprite(
   opts: { silhouette?: boolean; age?: number; pose?: 'idle' | 'attack' | 'portrait' | 'icon' } = {},
 ): void {
   if (opts.silhouette) {
+    if (assets.drawSilhouette(ctx, aetherPath(species, 'portrait'), size)) return;
     drawDrake(ctx, species, size, opts);
     return;
   }

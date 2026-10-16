@@ -5,6 +5,26 @@ import { WORLDS } from '../game/content/worlds.ts';
 import { getSkyPlate } from '../game/phaser/SkyPlates.ts';
 import { PortraitCanvas } from '../components/PortraitCanvas.tsx';
 import { drawGuardianSprite } from '../assets/drawEntity.ts';
+import { assets } from '../assets/AssetLoader.ts';
+import { envPath, guardianPath, worldAssetUrls } from '../assets/assetManifest.ts';
+
+function paintWorld(canvas: HTMLCanvasElement, world: W, width: number, height: number): void {
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const background = assets.get(envPath(world, 'bg'));
+  if (!background) {
+    ctx.drawImage(getSkyPlate(world), 0, 80, 540, 520, 0, 0, width, height);
+    return;
+  }
+  for (const layer of ['bg', 'mid', 'fg'] as const) {
+    const image = assets.get(envPath(world, layer));
+    if (!image) continue;
+    const sourceHeight = image.width * height / width;
+    ctx.drawImage(image, 0, Math.max(0, (image.height - sourceHeight) / 2), image.width, Math.min(image.height, sourceHeight), 0, 0, width, height);
+  }
+}
 
 interface PromoProps {
   world: W;
@@ -26,13 +46,12 @@ export function PromoFrame({ world, guardian, className = '', caption, size = 16
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const plate = getSkyPlate(world);
-    canvas.width = 540;
-    canvas.height = 360;
-    ctx.drawImage(plate, 0, 140, 540, 480, 0, 0, 540, 360);
-  }, [world]);
+    const paint = () => paintWorld(canvas, world, 540, 360);
+    const off = assets.onReady(paint);
+    paint();
+    void assets.load([...worldAssetUrls(world), guardianPath(guardian, 'portrait')]);
+    return off;
+  }, [world, guardian]);
 
   return (
     <figure className={`lp-promo ${className}`}>
@@ -59,12 +78,11 @@ export function WorldThumb({ world, selected = false, onSelect }: ThumbProps) {
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const plate = getSkyPlate(world);
-    canvas.width = 320;
-    canvas.height = 200;
-    ctx.drawImage(plate, 0, 80, 540, 520, 0, 0, 320, 200);
+    const paint = () => paintWorld(canvas, world, 320, 200);
+    const off = assets.onReady(paint);
+    paint();
+    void assets.load(worldAssetUrls(world));
+    return off;
   }, [world]);
 
   return (

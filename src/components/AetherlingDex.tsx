@@ -52,7 +52,7 @@ export function AetherlingDex({ save, notice, onEquip, onEvolve, onDissolve, onB
             const live = save.aetherlings.find((u) => u.species === sp);
             return (
               <button key={sp} type="button" className="dex-card" onClick={() => live && setPick(live)}>
-                <PortraitCanvas size={56} draw={(ctx) => drawAetherSprite(ctx, sp, 36, { silhouette: !known, pose: 'portrait' })} />
+                <PortraitCanvas size={72} offsetY={0} draw={(ctx) => drawAetherSprite(ctx, sp, 68, { silhouette: !known, pose: 'portrait' })} />
                 <strong>{known ? SPECIES_META[sp].name : '???'}</strong>
                 <small>{known ? `${SPECIES_META[sp].element} · ${live ? `★${live.stars} LV ${live.level}` : 'seen'}` : 'Unknown silhouette'}</small>
               </button>

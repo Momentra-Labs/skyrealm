@@ -3,6 +3,7 @@ import type { SaveGame } from '../types/game.ts';
 import { BOSS_LIST } from '../game/content/bosses.ts';
 import { weaknessOf } from '../game/content/elements.ts';
 import { HangarChrome } from './HangarChrome.tsx';
+import { bossPath, elementAssets } from '../assets/assetManifest.ts';
 
 interface Props {
   save: SaveGame;
@@ -21,7 +22,11 @@ export function RaidGate({ save, notice, onEnter, onBack }: Props) {
       {!charged && <p className="hangar-note">No Boss Energy. Fly or claim quests to refill a charge.</p>}
       <ul className="hangar-list">
         {BOSS_LIST.map((b) => (
-          <li key={b.kind} className="hangar-item">
+          <li key={b.kind} className="hangar-item raid-item">
+            <span className={`raid-portrait raid-el-${b.element.toLowerCase()}`}>
+              <img src={bossPath(b.kind, 'portrait')} alt="" loading="lazy" decoding="async" />
+              <img className="raid-badge" src={elementAssets[b.element]} alt="" />
+            </span>
             <div>
               <strong>{b.name}</strong>
               <span>

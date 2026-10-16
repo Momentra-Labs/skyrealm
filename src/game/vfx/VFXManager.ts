@@ -67,6 +67,7 @@ export class VFXManager {
     const len = Math.hypot(vx, vy) || 1;
     const nx = vx / len;
     const ny = vy / len;
+    this.particles.streak(x, y, nx * 145, ny * 145, paint.edge, 0.13, 4);
     this.particles.ringFlash(x, y, paint.rim, 3, 30, 0.16);
     for (let i = 0; i < 4; i++) {
       const spread = (Math.random() - 0.5) * 1.1;
@@ -89,6 +90,10 @@ export class VFXManager {
     if (!this.enabled()) return;
     const paint = monsterRgb(element);
     this.particles.ringFlash(x, y, paint.edge, 5, 74, 0.24);
+    for (let i = 0; i < 5; i++) {
+      const angle = i * Math.PI * 2 / 5;
+      this.particles.streak(x, y, Math.cos(angle) * 140, Math.sin(angle) * 140, paint.rim, 0.22, 2.8);
+    }
     this.particles.burstStars(x, y, 7, paint.edge);
     this.particles.puff(x, y, paint.rim);
   }

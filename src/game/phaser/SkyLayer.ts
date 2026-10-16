@@ -1,11 +1,18 @@
 import Phaser from 'phaser';
+import { GameState } from '../../types/game.ts';
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from '../constants.ts';
 import type { SkyPalette } from '../content/skies.ts';
 import type { GameEngine } from '../GameEngine.ts';
 import type { StarFloater } from '../Starfield.ts';
 import type { TextureBank } from './TextureBank.ts';
 
-const DEPTH = { sky: 0, plate: 1, png: 1, disk: 2, curtain: 3, weather: 4, veil: 8 };
+const DEPTH = { sky: 0, plate: 1, bg: 1, disk: 2, mid: 2.5, curtain: 3, fg: 3.5, weather: 4, veil: 8 };
+
+/**
+ * Parallax rates against the run's scroll. Kept restrained: the painting
+ * drifts slowly, the cloud banks a little faster, the near banks fastest.
+ */
+const PARALLAX = { bg: 0.32, mid: 0.7, fg: 1.15 };
 
 export class SkyLayer {
   private readonly engine: GameEngine;
@@ -17,10 +24,9 @@ export class SkyLayer {
   private lastGrad = '';
   private readonly plateA: Phaser.GameObjects.Image;
   private readonly plateB: Phaser.GameObjects.Image;
-  private readonly midA: Phaser.GameObjects.Image;
-  private readonly midB: Phaser.GameObjects.Image;
-  private readonly fgA: Phaser.GameObjects.Image;
-  private readonly fgB: Phaser.GameObjects.Image;
+  private readonly bg: Strip;
+  private readonly mid: Strip;
+  private readonly fg: Strip;
   private readonly curtainL: Phaser.GameObjects.Image;
   private readonly curtainR: Phaser.GameObjects.Image;
 
@@ -31,10 +37,9 @@ export class SkyLayer {
     this.plateA = makeLayer(scene, DEPTH.plate);
     this.plateB = makeLayer(scene, DEPTH.plate);
     this.disk = scene.add.graphics().setDepth(DEPTH.disk);
-    this.midA = makeLayer(scene, DEPTH.png);
-    this.midB = makeLayer(scene, DEPTH.png);
-    this.fgA = makeLayer(scene, DEPTH.png);
-    this.fgB = makeLayer(scene, DEPTH.png);
+    this.bg = new Strip(scene, DEPTH.bg);
+    this.mid = new Strip(scene, DEPTH.mid);
+    this.fg = new Strip(scene, DEPTH.fg);
     this.curtainL = makeLayer(scene, DEPTH.curtain);
     this.curtainR = makeLayer(scene, DEPTH.curtain);
     this.sceneGfx = scene.add.graphics().setDepth(DEPTH.weather);
@@ -43,15 +48,27 @@ export class SkyLayer {
   }
 
   sync(): void {
+    this.veil.setVisible(this.engine.state !== GameState.MENU);
     const field = this.engine.starfield;
     const pal = field.palette();
     this.paintGradient(pal, field.fading);
     this.sky.scene.cameras.main.setBackgroundColor(pal.top);
-    this.placePlates(field.worldId, field.scroll);
-    this.paintDisk(pal);
-    this.placePair(this.midA, this.midB, field.worldId, 'mid', 0.2, field.scroll * 0.62);
-    this.placePair(this.fgA, this.fgB, field.worldId, 'fg', 0.14, field.scroll * 0.38);
-    this.placeCurtains(field.worldId);
+    // The painted sky is the scene once it has loaded. Until then the
+    // procedural plate, sun and side curtains stand in for it.
+    const painted = this.bg.place(this.bank.env(field.worldId, 'bg'), field.scroll * PARALLAX.bg, 1);
+    this.mid.place(this.bank.env(field.worldId, 'mid'), field.scroll * PARALLAX.mid, 0.95);
+    this.fg.place(this.bank.env(field.worldId, 'fg'), field.scroll * PARALLAX.fg, 0.9);
+    if (painted) {
+      this.plateA.setVisible(false);
+      this.plateB.setVisible(false);
+      this.curtainL.setVisible(false);
+      this.curtainR.setVisible(false);
+      this.disk.clear();
+    } else {
+      this.placePlates(field.worldId, field.scroll);
+      this.paintDisk(pal);
+      this.placeCurtains(field.worldId);
+    }
     this.paintWeather(pal);
   }
 
@@ -136,28 +153,14 @@ export class SkyLayer {
     g.clear();
     const w = LOGICAL_WIDTH;
     const h = LOGICAL_HEIGHT;
-    g.fillStyle(0x2a1838, 0.05);
-    g.fillRect(0, 0, w, 36);
-    g.fillRect(0, h - 48, w, 48);
-  }
-
-  private placePair(
-    a: Phaser.GameObjects.Image,
-    b: Phaser.GameObjects.Image,
-    world: string,
-    layer: 'bg' | 'mid' | 'fg',
-    alpha: number,
-    scroll: number,
-  ): void {
-    const key = this.bank.env(world, layer);
-    if (!key) {
-      a.setVisible(false);
-      b.setVisible(false);
-      return;
-    }
-    const shift = wrapShift(scroll);
-    showCover(a, key, 0, shift - LOGICAL_HEIGHT, alpha);
-    showCover(b, key, 0, shift, alpha);
+    // Recede the scenery behind luminous wings and hostile projectiles.
+    // This sits below every gameplay sprite, so it never dims the action.
+    g.fillGradientStyle(0x102b3b, 0x102b3b, 0x1b1734, 0x1b1734, 0.18, 0.18, 0.3, 0.3);
+    g.fillRect(0, 0, w, h);
+    g.fillGradientStyle(0x11192b, 0x11192b, 0x11192b, 0x11192b, 0.14, 0, 0.14, 0);
+    g.fillRect(0, 0, 70, h);
+    g.fillGradientStyle(0x11192b, 0x11192b, 0x11192b, 0x11192b, 0, 0.14, 0, 0.14);
+    g.fillRect(w - 70, 0, 70, h);
   }
 
   private mote(g: Phaser.GameObjects.Graphics, f: StarFloater, pal: SkyPalette): void {
@@ -178,6 +181,46 @@ export class SkyLayer {
     g.fillStyle(pal.weather, f.alpha);
     g.fillTriangle(f.x, f.y - f.h, f.x + f.w * 0.4, f.y, f.x, f.y + f.h * 0.4);
     g.fillTriangle(f.x, f.y - f.h, f.x, f.y + f.h * 0.4, f.x - f.w * 0.4, f.y);
+  }
+}
+
+/** A vertically looping image layer, drawn at the texture's true aspect. */
+class Strip {
+  private readonly scene: Phaser.Scene;
+  private readonly depth: number;
+  private readonly tiles: Phaser.GameObjects.Image[] = [];
+
+  constructor(scene: Phaser.Scene, depth: number) {
+    this.scene = scene;
+    this.depth = depth;
+  }
+
+  /** Returns false (and hides) when the texture is not ready yet. */
+  place(key: string | null, scroll: number, alpha: number): boolean {
+    if (!key) {
+      for (const t of this.tiles) t.setVisible(false);
+      return false;
+    }
+    const src = this.scene.textures.get(key).getSourceImage() as { width: number; height: number };
+    const span = Math.max(64, Math.round((LOGICAL_WIDTH * src.height) / Math.max(1, src.width)));
+    const need = Math.ceil(LOGICAL_HEIGHT / span) + 1;
+    while (this.tiles.length < need) this.tiles.push(makeLayer(this.scene, this.depth));
+    const shift = ((Math.round(scroll) % span) + span) % span;
+    for (let i = 0; i < this.tiles.length; i++) {
+      const img = this.tiles[i]!;
+      if (i >= need) {
+        img.setVisible(false);
+        continue;
+      }
+      if (img.texture.key !== key) img.setTexture(key);
+      img.setVisible(true);
+      img.setAlpha(alpha);
+      img.setPosition(0, shift - span + i * span);
+      // An opaque layer overlaps one px to hide any sub-pixel gap; a
+      // translucent one must not, or the shared row blends twice and shows.
+      img.setDisplaySize(LOGICAL_WIDTH, alpha >= 1 ? span + 1 : span);
+    }
+    return true;
   }
 }
 

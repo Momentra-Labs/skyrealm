@@ -1,6 +1,6 @@
 import { EnemyType, RunMode } from '../types/game.ts';
 import type { BossKind, EnemyType as En, WorldId } from '../types/game.ts';
-import { WORLD_LIST, WORLDS } from './content/worlds.ts';
+import { WORLD_LIST } from './content/worlds.ts';
 import { WORLD_BOSS } from './content/bosses.ts';
 import { WORLD_WAVES } from './content/formations.ts';
 import type { WavePiece } from './content/formations.ts';
@@ -27,6 +27,9 @@ export class RunDirector {
   mode: RunMode = RunMode.NORMAL;
   raidKind: BossKind | null = null;
   raidStarted = false;
+  stage = 1;
+  recovery = 0;
+  private awaitingBoss = false;
 
   start(mode: RunMode, raidKind?: BossKind): void {
     this.time = 0;
@@ -35,7 +38,10 @@ export class RunDirector {
     this.formCd = 5.2;
     this.formStep = 0;
     this.eliteCd = 20;
-    this.bossCd = mode === RunMode.TRAINING ? 9999 : 70;
+    this.bossCd = mode === RunMode.TRAINING ? 9999 : 45;
+    this.stage = 1;
+    this.recovery = 0;
+    this.awaitingBoss = false;
     this.crateCd = 16;
     this.ramp = 0;
     this.mode = mode;
@@ -45,6 +51,18 @@ export class RunDirector {
 
   world() {
     return WORLD_LIST[this.biomeIndex % WORLD_LIST.length]!;
+  }
+
+  bossDefeated(): void {
+    if (this.mode !== RunMode.NORMAL) return;
+    this.stage += 1;
+    this.awaitingBoss = false;
+    this.recovery = 4;
+    this.bossCd = 45;
+    this.spawnCd = 0.8;
+    this.formCd = 2;
+    this.eliteCd = 20;
+    this.crateCd = 14;
   }
 
   hpScale(): number {
@@ -67,25 +85,29 @@ export class RunDirector {
       return events;
     }
 
-    if (Math.floor(this.time / 45) > this.ramp) {
-      this.ramp += 1;
-      events.push({ banner: 'THE SKY THICKENS', worldId: world.id });
+    if (fightingBoss || this.awaitingBoss) return events;
+    if (this.recovery > 0) {
+      this.recovery = Math.max(0, this.recovery - dt);
+      if (this.recovery === 0) {
+        this.biomeIndex = (this.stage - 1) % WORLD_LIST.length;
+        this.ramp = this.stage - 1;
+        this.formStep = 0;
+        events.push({ banner: `REALM ${this.stage} · ${this.world().name}`, worldId: this.world().id });
+      }
+      return events;
     }
-    const biome = Math.floor(this.time / 80) % WORLD_LIST.length;
-    if (biome !== this.biomeIndex) {
-      this.biomeIndex = biome;
-      this.formStep = 0;
-      this.formCd = Math.min(this.formCd, 3.2);
-      events.push({ banner: WORLDS[this.world().id].name, worldId: this.world().id });
-    }
-
-    if (fightingBoss) return events;
 
     this.spawnCd -= dt;
     this.formCd -= dt;
     this.eliteCd -= dt;
     this.bossCd -= dt;
     this.crateCd -= dt;
+
+    if (this.bossCd <= 0 && this.mode === RunMode.NORMAL) {
+      this.awaitingBoss = true;
+      events.push({ boss: WORLD_BOSS[world.id], banner: 'BOSS APPROACHING', worldId: world.id });
+      return events;
+    }
 
     if (this.formCd <= 0) {
       this.formCd = Math.max(5.8, 9.4 - this.ramp * 0.4);
@@ -107,10 +129,6 @@ export class RunDirector {
     if (this.crateCd <= 0) {
       this.crateCd = 20;
       events.push({ spawn: { type: EnemyType.LOOT_CRATE, count: 1 }, worldId: world.id });
-    }
-    if (this.bossCd <= 0 && this.mode === RunMode.NORMAL) {
-      this.bossCd = 85;
-      events.push({ boss: WORLD_BOSS[world.id], banner: 'BOSS APPROACHING', worldId: world.id });
     }
     return events;
   }

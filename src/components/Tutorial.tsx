@@ -4,10 +4,7 @@ interface Props {
 }
 
 const BEATS = [
-  { title: 'MOVE', body: 'On a phone, steer with the joystick. WASD or arrows also work. Open Settings to put the pad on the left or right.' },
-  { title: 'ATTACK', body: 'Auto-fire never stops. Clover pickups raise attack level. E spends special energy.' },
-  { title: 'AETHERLINGS', body: 'Two companions follow and fight on their own. Hatch eggs in EGGS, then equip them in AETHERLINGS.' },
-  { title: 'BOSS', body: 'A realm boss arrives with a shown weakness. Match elements, then bank the loot.' },
+  { title: 'DRAG. DODGE. COLLECT.', body: 'Drag anywhere in the sky to steer. Your party fires automatically. Collect treasure and clovers, defeat the realm boss, then fly into the next realm. Spend coins on guardian levels between flights. WASD / arrows also work; E unleashes your special.' },
 ];
 
 export function Tutorial({ step, onNext }: Props) {

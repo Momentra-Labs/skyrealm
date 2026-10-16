@@ -13,6 +13,9 @@ interface Props {
 
 export function GameCanvas({ engine, bridge, pointerControl }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pointerControl) engine.input.setPointer(engine.input.pointerX, engine.input.pointerY, false);
+  }, [engine, pointerControl]);
   useGameInput(engine);
 
   useEffect(() => {
@@ -65,6 +68,7 @@ export function GameCanvas({ engine, bridge, pointerControl }: Props) {
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
+        onLostPointerCapture={() => engine.input.setPointer(engine.input.pointerX, engine.input.pointerY, false)}
         onContextMenu={(event) => event.preventDefault()}
       />
     </div>

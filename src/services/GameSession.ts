@@ -244,6 +244,22 @@ export class GameSession {
     ];
   }
 
+  guardianUpgradeCost(): number {
+    return 100 + this.data.guardians[this.data.equippedGuardian].level * 40;
+  }
+
+  upgradeGuardian(): string {
+    const guardian = this.data.guardians[this.data.equippedGuardian];
+    if (guardian.level >= 50) return 'Guardian at maximum level';
+    const cost = this.guardianUpgradeCost();
+    if (this.data.profile.coins < cost) return 'Collect more coins on your next flight';
+    this.data.profile.coins -= cost;
+    guardian.level += 1;
+    this.refreshUnlocks();
+    this.persist();
+    return `Guardian upgraded to level ${guardian.level}`;
+  }
+
   spendRaidEnergy(): string {
     if (this.data.profile.bossEnergy <= 0) return 'Need boss energy';
     this.data.profile.bossEnergy -= 1;

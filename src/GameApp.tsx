@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import './game-theme.css';
 import { GameState, RunMode, UiScreen } from './types/game.ts';
 import type { GameSnapshot, GameState as GameStateT, OwnedAetherling, RunMode as RunModeT, UiScreen as UiScreenT } from './types/game.ts';
 import { GameEngine } from './game/GameEngine.ts';
@@ -7,6 +8,7 @@ import type { GameSession } from './services/GameSession.ts';
 import { BossWarning } from './components/BossWarning.tsx';
 import { CountdownOverlay } from './components/CountdownOverlay.tsx';
 import { GameHUD } from './components/GameHUD.tsx';
+import { MagicFrame } from './components/MagicFrame.tsx';
 import { GameOver } from './components/GameOver.tsx';
 import { HowToPlay } from './components/HowToPlay.tsx';
 import { Home } from './components/Home.tsx';
@@ -49,7 +51,6 @@ export default function GameApp({ session }: Props) {
   const [gameState, setGameState] = useState<GameStateT>(GameState.MENU);
   const [ui, setUi] = useState<UiScreenT>(UiScreen.MENU);
   const [settingsFrom, setSettingsFrom] = useState<'menu' | 'pause'>('menu');
-  const [mobile, setMobile] = useState(false);
   const [snap, setSnap] = useState<GameSnapshot>(() => ({ ...engine.getSnapshot() }));
   const [save, setSave] = useState(() => structuredClone(session.data));
   const [notice, setNotice] = useState('');
@@ -73,28 +74,34 @@ export default function GameApp({ session }: Props) {
   }, [ready]);
   useEffect(() => {
     let alive = true;
+    let loaded = false;
+    let completedAt = 0;
+    const startedAt = performance.now();
     const push = () => {
-      if (alive) setLoadPct(assets.progress);
+      if (!alive) return;
+      const progress = Math.min(loaded ? 1 : Math.min(.95, assets.progress), (performance.now() - startedAt) / 2400);
+      setLoadPct(progress);
+      if (loaded && progress >= 1) {
+        if (!completedAt) completedAt = performance.now();
+        if (performance.now() - completedAt >= 320) {
+          setReady(true);
+          window.clearInterval(tick);
+        }
+      }
     };
     const offProgress = assets.onProgress(push);
     const tick = window.setInterval(push, 80);
     push();
     void assets.load(hangarBootUrls()).then(() => {
       if (!alive) return;
-      setLoadPct(1);
-      setReady(true);
+      loaded = true;
+      push();
     });
     return () => {
       alive = false;
       offProgress();
       window.clearInterval(tick);
     };
-  }, []);
-  useEffect(() => {
-    const check = () => setMobile(window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 860);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
   }, []);
   useEffect(() => {
     return bridge.on((_event, state) => {
@@ -130,6 +137,7 @@ export default function GameApp({ session }: Props) {
   }, [snap.skyTop, snap.skyGlow, snap.skyMid, snap.skyGround]);
 
   const play = (mode: RunModeT = RunMode.NORMAL, raid?: BossKind) => {
+    setNotice('');
     bridge.unlockAudio();
     engine.audio.play('menu');
     engine.setIgnorePause(false);
@@ -163,7 +171,6 @@ export default function GameApp({ session }: Props) {
     gameState !== GameState.PAUSED;
 
   const showTouch =
-    mobile &&
     ui === UiScreen.GAME &&
     (gameState === GameState.PLAYING ||
       gameState === GameState.BOSS_FIGHT ||
@@ -172,16 +179,21 @@ export default function GameApp({ session }: Props) {
 
   if (!ready) {
     return (
+      <>
+      <MagicFrame />
       <div className="app-shell app-shell-load">
         <LoadingScreen progress={loadPct} />
       </div>
+      </>
     );
   }
 
   return (
+    <>
+    <MagicFrame />
     <div className="app-shell">
       <Suspense fallback={null}>
-        <GameCanvas engine={engine} bridge={bridge} pointerControl={inGame && !mobile} />
+        <GameCanvas engine={engine} bridge={bridge} pointerControl={inGame} />
       </Suspense>
 
       {ui === UiScreen.MENU && !save.tutorialDone && (
@@ -370,8 +382,7 @@ export default function GameApp({ session }: Props) {
         gameState !== GameState.VICTORY && (
           <GameHUD
             snap={snap}
-            compact={mobile}
-            onPause={mobile ? undefined : () => engine.input.queuePause()}
+            compact
           />
         )}
       {ui === UiScreen.GAME && gameState === GameState.COUNTDOWN && <CountdownOverlay label={snap.countdownLabel} />}
@@ -390,7 +401,10 @@ export default function GameApp({ session }: Props) {
         />
       )}
       {ui === UiScreen.GAME && gameState === GameState.GAME_OVER && (
-        <GameOver snap={snap} onRetry={() => play(engine.mode, engine.director.raidKind ?? undefined)} onMenu={toMenu} />
+        <GameOver snap={snap} onRetry={() => play(engine.mode, engine.director.raidKind ?? undefined)} onMenu={toMenu}
+          coins={save.profile.coins} guardianLevel={save.guardians[save.equippedGuardian].level}
+          upgradeCost={session.guardianUpgradeCost()} notice={notice}
+          onUpgrade={() => { setNotice(session.upgradeGuardian()); refresh(); }} />
       )}
       {ui === UiScreen.GAME && gameState === GameState.VICTORY && (
         <Victory snap={snap} onAgain={() => play(engine.mode, engine.director.raidKind ?? undefined)} onMenu={toMenu} />
@@ -404,5 +418,6 @@ export default function GameApp({ session }: Props) {
         />
       )}
     </div>
+    </>
   );
 }

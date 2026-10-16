@@ -6,7 +6,6 @@ import {
   EnemyType,
   GuardianId,
   PowerUpType,
-  Rarity,
   WorldId,
 } from '../types/game.ts';
 import type {
@@ -17,7 +16,6 @@ import type {
   EnemyType as En,
   GuardianId as GID,
   PowerUpType as PU,
-  Rarity as Rar,
   WorldId as W,
 } from '../types/game.ts';
 
@@ -27,19 +25,30 @@ const ROOT = '/assets';
 const EXT = 'webp';
 
 export function guardianPath(id: GID, pose: Pose): string {
-  return `${ROOT}/guardians/${id.toLowerCase()}_${pose}.${EXT}`;
+  const view = pose === 'portrait' || pose === 'icon' ? 'v2' : 'rear';
+  return `${ROOT}/guardians/${view}/${id.toLowerCase()}.${EXT}`;
 }
 
 export function aetherPath(id: Sp, pose: Pose): string {
-  return `${ROOT}/aetherlings/${id.toLowerCase()}_${pose}.${EXT}`;
+  const view = pose === 'portrait' || pose === 'icon' ? 'v2' : 'rear';
+  return `${ROOT}/aetherlings/${view}/${id.toLowerCase()}.${EXT}`;
 }
 
-export function enemyPath(id: En, pose: Pose = 'idle'): string {
-  return `${ROOT}/enemies/${id.toLowerCase()}_${pose}.${EXT}`;
+export function enemyPath(id: En, _pose: Pose = 'idle'): string {
+  return `${ROOT}/enemies/v2/${id.toLowerCase()}.${EXT}`;
 }
 
-export function bossPath(id: BK, pose: Pose): string {
-  return `${ROOT}/bosses/${id.toLowerCase()}_${pose}.${EXT}`;
+export function bossPath(id: BK, _pose: Pose): string {
+  return `${ROOT}/bosses/v2/${id.toLowerCase()}.${EXT}`;
+}
+
+export function hazardPath(kind: 'magma' | 'ice', variant: 0 | 1 | 2): string {
+  const size = ['small', 'medium', 'large'][variant];
+  return `${ROOT}/hazards/v2/${kind}_${size}.${EXT}`;
+}
+
+export function hazardAssetUrls(): string[] {
+  return ([0, 1, 2] as const).flatMap(variant => [hazardPath('magma', variant), hazardPath('ice', variant)]);
 }
 
 export function envPath(id: W, layer: 'bg' | 'mid' | 'fg'): string {
@@ -49,11 +58,6 @@ export function envPath(id: W, layer: 'bg' | 'mid' | 'fg'): string {
 export const uiAssets = {
   logo: `${ROOT}/ui/logo_skyrealm.${EXT}`,
   styleBible: `${ROOT}/ui/style_bible.${EXT}`,
-  panel: `${ROOT}/ui/panel.${EXT}`,
-  btn: `${ROOT}/ui/btn.${EXT}`,
-  lock: `${ROOT}/icons/lock.${EXT}`,
-  close: `${ROOT}/icons/close.${EXT}`,
-  settings: `${ROOT}/icons/settings.${EXT}`,
   coin: `${ROOT}/icons/coin.${EXT}`,
   crystal: `${ROOT}/icons/crystal.${EXT}`,
   trophy: `${ROOT}/icons/trophy.${EXT}`,
@@ -62,6 +66,8 @@ export const uiAssets = {
   hudShield: `${ROOT}/icons/hud_shield.${EXT}`,
   hudSpecial: `${ROOT}/icons/hud_special.${EXT}`,
   hudPause: `${ROOT}/icons/hud_pause.${EXT}`,
+  cloudA: `${ROOT}/ui/cloud_a.${EXT}`,
+  cloudB: `${ROOT}/ui/cloud_b.${EXT}`,
 } as const;
 
 export const elementAssets: Record<El, string> = {
@@ -71,14 +77,6 @@ export const elementAssets: Record<El, string> = {
   [ElementId.SHADOW]: `${ROOT}/icons/el_shadow.${EXT}`,
   [ElementId.LIGHT]: `${ROOT}/icons/el_light.${EXT}`,
   [ElementId.ARCANE]: `${ROOT}/icons/el_arcane.${EXT}`,
-};
-
-export const rarityAssets: Record<Rar, string> = {
-  [Rarity.COMMON]: `${ROOT}/ui/frame_common.${EXT}`,
-  [Rarity.RARE]: `${ROOT}/ui/frame_rare.${EXT}`,
-  [Rarity.EPIC]: `${ROOT}/ui/frame_epic.${EXT}`,
-  [Rarity.LEGENDARY]: `${ROOT}/ui/frame_legendary.${EXT}`,
-  [Rarity.MYTHIC]: `${ROOT}/ui/frame_mythic.${EXT}`,
 };
 
 export const eggAssets: Record<Egg, string> = {
@@ -103,11 +101,6 @@ export const particleAssets = {
   spark: `${ROOT}/particles/spark.${EXT}`,
   puff: `${ROOT}/particles/puff.${EXT}`,
 } as const;
-
-export const SKIP_SHEET_URLS = new Set<string>([
-  aetherPath(AetherlingSpecies.CRYSTSERPENT, 'idle'),
-  aetherPath(AetherlingSpecies.CRYSTSERPENT, 'portrait'),
-]);
 
 export function hangarChipUrls(): string[] {
   return [
@@ -135,6 +128,7 @@ export function hangarBootUrls(): string[] {
     aetherPath(AetherlingSpecies.FLICKER, 'portrait'),
     aetherPath(AetherlingSpecies.LUMEN, 'portrait'),
     aetherPath(AetherlingSpecies.TIDECURL, 'idle'),
+    aetherPath(AetherlingSpecies.TIDECURL, 'portrait'),
   );
   return [...new Set(urls)];
 }
@@ -152,7 +146,7 @@ export function speciesAssetUrls(id: Sp): string[] {
 }
 
 export function combatPackUrls(): string[] {
-  const urls: string[] = [...Object.values(powerUpAssets)];
+  const urls: string[] = [...Object.values(powerUpAssets), ...hazardAssetUrls()];
   for (const id of Object.values(EnemyType)) urls.push(enemyPath(id, 'idle'));
   for (const id of Object.values(BossKind)) {
     urls.push(bossPath(id, 'idle'), bossPath(id, 'attack'), bossPath(id, 'portrait'));
@@ -170,9 +164,9 @@ const BOSS_POSES: Pose[] = ['idle', 'attack', 'hit', 'ability', 'death', 'portra
 /** Every image the hangar, menu, and a full run can ask for. */
 export function allAssetUrls(): string[] {
   const urls: string[] = [
+    ...hazardAssetUrls(),
     ...Object.values(uiAssets),
     ...Object.values(elementAssets),
-    ...Object.values(rarityAssets),
     ...Object.values(eggAssets),
     ...Object.values(powerUpAssets),
     ...Object.values(particleAssets),

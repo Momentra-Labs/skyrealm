@@ -1,0 +1,58 @@
+/* Shared storybook palette for the landing page and the playable experience. */
+html.is-game { --game-ink:#493122; --game-muted:#71513a; --game-gold:#ad6a20; }
+html.is-game #root {
+ background:linear-gradient(#d7eff166,#efd1a4bb),url('/assets/environments/meadows_bg.webp') center/cover;
+}
+html.is-game .app-shell {
+ --text:#493122; --muted:#71513a; --gold:#9a601f; --cyan:#147a92; --line:#bc945c;
+ --title:Georgia,serif; --font:'Segoe UI',sans-serif; --ink:none;
+ color:#493122; font-family:'Segoe UI',sans-serif;
+}
+html.is-game .panel {
+ background:radial-gradient(ellipse at top,#fff9e9,#efd6ad);
+ border:2px solid #a77b43; border-radius:14px;
+ box-shadow:inset 0 0 0 3px #fff5db,0 12px 35px #49312250; text-shadow:none;
+}
+html.is-game .panel h2 { color:#694321; font-family:Georgia,serif; letter-spacing:.04em; text-shadow:none; }
+html.is-game .panel :is(.hangar-blurb,.hangar-bank,.subhead,.muted,.hud-label,.guardian-btn small,.hangar-slot span,.dex-card small,.briefing span,.briefing em) { color:#71513a; text-shadow:none; }
+html.is-game .panel :is(.hangar-slot,.hangar-item,.dex-card,.briefing,.stats li,.how-grid>div) { background:#fff8e6b8; border-color:#c9a16a; color:#493122; box-shadow:none; }
+html.is-game .panel :is(.stats strong,.briefing strong) { color:#694321; }
+html.is-game .panel .ns-btn { background:linear-gradient(#fff6dc,#edd2a4); border:1px solid #b68c50; border-radius:9px; color:#62411f; font:700 12px 'Segoe UI',sans-serif; letter-spacing:.06em; box-shadow:inset 0 1px #fffdf2,0 2px 0 #b38a514d; }
+html.is-game .panel .ns-btn-primary { background:linear-gradient(#93d84e,#4b9a29); border:2px solid #34671d; color:white; text-shadow:0 1px #386e22; box-shadow:inset 0 2px #cff49c,0 3px 0 #34671d; }
+html.is-game .panel .ns-btn:hover:not(:disabled) { filter:brightness(1.05); transform:translateY(-2px); }
+html.is-game .panel .toggle { color:#624829; accent-color:#4b9a29; }
+html.is-game .overlay-home .home-hero { background:linear-gradient(#d7f6f21a,#efd1a41a),url('/assets/environments/meadows_bg.webp') center/cover; }
+html.is-game .hud-compact .hud-frame { font-family:'Segoe UI',sans-serif; background:linear-gradient(#efe0ba91,transparent 135px); }
+html.is-game .hud-compact .hud-top .hud-block { background:linear-gradient(#fff8e8f5,#efd7aff5); border:1px solid #a77b43; box-shadow:inset 0 1px #fffdf0,0 2px 5px #61452b26; }
+html.is-game .hud-compact .hud-block strong { color:#493122; text-shadow:none; }
+html.is-game .hud-compact .hud-top .hud-label { color:#80603a; }
+html.is-game .hud-compact .bar-track { background:#705940; border-color:#a77b43; box-shadow:inset 0 1px 3px #36241766; }
+html.is-game .hud-compact .bar .hud-ico { background:#f6e1b5; }
+html.is-game .hud-compact .bar-readout { color:#493122; text-shadow:0 1px 2px #fff9e6,0 0 5px #fff9e6; font-weight:800; }
+html.is-game .hud-compact .bar-sp.is-ready .bar-readout { color:#276121; }
+html.is-game .hud-compact .hud-stage-row .hud-block { background:#fff5deed; border:1px solid #c49b61; }
+html.is-game .hud-compact .hud-mode { background:linear-gradient(#ffe89e,#efba54); border-color:#a77b43; color:#62411f; }
+html.is-game .hud-compact .boss-bar { background:#fff4dce8; border:1px solid #b68c50; padding:6px; border-radius:8px; color:#714222; }
+html.is-game .touch-btn.pause { background:linear-gradient(#ffe89e,#efba54); border-color:#825719; box-shadow:inset 0 2px #fff6d4,0 3px 0 #825719; }
+html.is-game .touch-pause-bars { border-color:#62411f; }
+html.is-game .touch-special-face { background:linear-gradient(#fff5dc,#ecc47c); border-color:#825719; box-shadow:inset 0 2px #fffdf2; opacity:1; filter:none; }
+html.is-game .touch-special-glyph { color:#62411f; }
+html.is-game .touch-btn.special::before { background:conic-gradient(#72be4c var(--sp),#efd8ad 0); box-shadow:0 0 0 2px #a77b43; }
+html.is-game .touch-btn.special.is-ready::before { background:conic-gradient(#8bd951,#d4f5a5,#69ad39,#8bd951); }
+html.is-game .touch-btn.special.is-ready .touch-special-face { background:linear-gradient(#93d84e,#4b9a29); box-shadow:inset 0 2px #cff49c; }
+html.is-game .touch-btn.special.is-ready .touch-special-glyph { color:#fff; text-shadow:0 1px #386e22; }
+html.is-game .touch-btn.special.is-ready { filter:drop-shadow(0 0 10px #c7ec8c88); }
+html.is-game .aether-loading { color:#493122; background:radial-gradient(ellipse at 50% 42%,#e3fbf7b3,transparent 60%),linear-gradient(#fff4dcd9,#efd1a4ed),url('/assets/environments/meadows_bg.webp') center/cover; }
+html.is-game .aether-loading-brand p,html.is-game .aether-loading-kicker { color:#87613b; }
+html.is-game .aether-loading-progress h1 { color:#694321; }
+html.is-game .aether-loading-tip,html.is-game .aether-progress-caption { color:#71513a; }
+html.is-game .aether-loading-tip span,html.is-game .aether-progress-caption strong { color:#8c5b27; }
+html.is-game .aether-progress { background:#dbc49e; border-color:#a77b43; }
+html.is-game .aether-progress>div { background:linear-gradient(90deg,#4b9a29,#93d84e,#e9f6a9); box-shadow:0 0 10px #c4ed8a; }
+html.is-game .aether-ring { border-color:#ad7e41aa; }
+html.is-game .aether-ring.inner { border-color:#39959c80; }
+html.is-game .aether-sigil { color:#8d642c; text-shadow:0 0 10px #fff9dd; }
+html.is-game .magic-runes { color:#368891; text-shadow:0 0 10px #f8ffe9; }
+html.is-game .magic-orbit { border-color:#9a764b50; }
+html.is-game .magic-orbit::before { border-color:#36889155; }
+html.is-game .magic-orbit::after { color:#36889180; text-shadow:0 0 30px #fff9e6; }

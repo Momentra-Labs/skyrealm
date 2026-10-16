@@ -30,7 +30,7 @@ export const EMBER_ASTEROID: HazardStyle = {
   haze: [96, 74, 68],
   trailSize: 2.6,
   trailStride: 1,
-  plume: 11,
+  plume: 7.5,
   wind: 26,
 };
 
@@ -45,7 +45,7 @@ export const FROST_HAIL: HazardStyle = {
   haze: [240, 251, 255],
   trailSize: 1.8,
   trailStride: 1,
-  plume: 12,
+  plume: 8,
   wind: 96,
 };
 

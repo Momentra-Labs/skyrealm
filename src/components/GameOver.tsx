@@ -4,13 +4,19 @@ interface Props {
   snap: GameSnapshot;
   onRetry: () => void;
   onMenu: () => void;
+  onUpgrade: () => void;
+  upgradeCost: number;
+  guardianLevel: number;
+  coins: number;
+  notice: string;
 }
 
-export function GameOver({ snap, onRetry, onMenu }: Props) {
+export function GameOver({ snap, onRetry, onMenu, onUpgrade, upgradeCost, guardianLevel, coins, notice }: Props) {
   return (
     <div className="overlay">
       <div className="panel">
-        <h2>GAME OVER</h2>
+        <p className="eyebrow">TREASURE BANKED · READY FOR ANOTHER FLIGHT?</p>
+        <h2>FLIGHT COMPLETE</h2>
         {snap.isNewHighScore && <p className="celebrate">NEW HIGH SCORE!</p>}
         <ul className="stats">
           <li>
@@ -38,11 +44,18 @@ export function GameOver({ snap, onRetry, onMenu }: Props) {
         </ul>
         <div className="menu-actions">
           <button type="button" className="ns-btn ns-btn-primary" onClick={onRetry}>
-            RETRY
+            FLY AGAIN
           </button>
           <button type="button" className="ns-btn" onClick={onMenu}>
-            MAIN MENU
+            CHANGE PARTY
           </button>
+        </div>
+        <div className="flight-upgrade">
+          <p>{snap.guardianName} · Level {guardianLevel} · {coins.toLocaleString()} coins</p>
+          <button type="button" className="ns-btn" onClick={onUpgrade} disabled={guardianLevel >= 50 || coins < upgradeCost}>
+            {guardianLevel >= 50 ? 'MAX LEVEL' : `UPGRADE GUARDIAN · ${upgradeCost} COINS`}
+          </button>
+          <p role="status">{notice || (coins < upgradeCost ? `${upgradeCost - coins} more coins to the next upgrade` : 'Grow stronger for your next flight.')}</p>
         </div>
       </div>
     </div>

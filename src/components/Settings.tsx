@@ -41,7 +41,7 @@ export function Settings({ settings, onChange, onBack, onReset, playful, onPop }
             </button>
           ))}
         </div>
-        <p className="hud-label">CONTROLS</p>
+        <p className="hud-label">STEERING HAND · SPECIAL ON OPPOSITE SIDE</p>
         <div className="diff-row">
           {(['LEFT', 'RIGHT'] as const).map((hand) => (
             <button

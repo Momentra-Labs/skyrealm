@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import { BRAND } from '../brand.ts';
+import { useState } from 'react';
 import type { SaveGame } from '../types/game.ts';
 import { GUARDIAN_META } from '../game/content/guardians.ts';
 import { SPECIES_META } from '../game/content/aetherlings.ts';
-import { BrandMark } from './BrandMark.tsx';
-import { MenuPlayground } from './MenuPlayground.tsx';
-import { PortraitCanvas } from './PortraitCanvas.tsx';
-import { drawAetherSprite, drawGuardianSprite } from '../assets/drawEntity.ts';
-import { assets } from '../assets/AssetLoader.ts';
-import { aetherPath, guardianPath, hangarChipUrls, uiAssets } from '../assets/assetManifest.ts';
+import { SkyrealmLogo } from './SkyrealmLogo.tsx';
+import { aetherPath, guardianPath, uiAssets } from '../assets/assetManifest.ts';
 import { web3UiOn } from '../web3/flags.ts';
 
 interface Props {
@@ -83,50 +78,21 @@ function HomeGlyph({ kind }: { kind: GlyphKind }) {
   );
 }
 
-export function Home({ save, notice, onPlay, onOpen, onPop, onLogin }: Props) {
+export function Home({ save, notice, onPlay, onOpen, onLogin }: Props) {
   const [more, setMore] = useState(false);
   const g = GUARDIAN_META[save.equippedGuardian];
   const a = save.equipped.map((id) => save.aetherlings.find((unit) => unit.id === id));
   const leftSpecies = a[0]?.species;
   const rightSpecies = a[1]?.species;
-  const drawGuardian = useCallback(
-    (ctx: CanvasRenderingContext2D) => {
-      drawGuardianSprite(ctx, save.equippedGuardian, 68, 'portrait');
-    },
-    [save.equippedGuardian],
-  );
-  const drawLeft = useCallback(
-    (ctx: CanvasRenderingContext2D) => {
-      if (leftSpecies) drawAetherSprite(ctx, leftSpecies, 38, { pose: 'portrait' });
-    },
-    [leftSpecies],
-  );
-  const drawRight = useCallback(
-    (ctx: CanvasRenderingContext2D) => {
-      if (rightSpecies) drawAetherSprite(ctx, rightSpecies, 38, { pose: 'portrait' });
-    },
-    [rightSpecies],
-  );
-
-  useEffect(() => {
-    const urls = [guardianPath(save.equippedGuardian, 'portrait'), ...hangarChipUrls()];
-    if (leftSpecies) urls.push(aetherPath(leftSpecies, 'portrait'));
-    if (rightSpecies) urls.push(aetherPath(rightSpecies, 'portrait'));
-    void assets.load(urls);
-  }, [leftSpecies, rightSpecies, save.equippedGuardian]);
-
   return (
     <div className="overlay overlay-menu overlay-home">
       <div className="menu-frame">
-        <MenuPlayground onPop={onPop} />
+
         <div className="home-layout">
           <div className="home-hero">
             <div className="home-brand-row">
-              <BrandMark size={40} />
-              <div className="home-brand-copy">
-                <p className="home-kicker">{BRAND.subtitle}</p>
-                <h1 className="home-title">{BRAND.name}</h1>
-              </div>
+              <SkyrealmLogo />
+              <span className="home-hangar-label">YOUR HANGAR</span>
             </div>
             <div className="home-fly">
               <div className="home-party-card">
@@ -137,45 +103,45 @@ export function Home({ save, notice, onPlay, onOpen, onPop, onLogin }: Props) {
                 <div className="home-party">
                   <button type="button" className="home-party-slot" onClick={() => onOpen('GUARDIANS')} aria-label="Change guardian">
                     <span className="home-party-face">
-                      <PortraitCanvas size={78} draw={drawGuardian} />
+                      <img className="home-party-art" src={guardianPath(save.equippedGuardian, 'portrait')} alt="" />
                     </span>
                     <span className="home-party-name">{g.name}</span>
                     <span className="home-party-role">LV {save.guardians[save.equippedGuardian].level} · GUARDIAN</span>
                   </button>
                   <button type="button" className="home-party-slot" onClick={() => onOpen('AETHERLINGS')} aria-label={a[0] ? `Change ${SPECIES_META[a[0].species].name}` : 'Add companion'}>
                     <span className={`home-party-face${a[0] ? '' : ' is-open'}`}>
-                      <PortraitCanvas size={54} className={a[0] ? '' : 'is-empty'} draw={drawLeft} />
+                      {leftSpecies && <img className="home-party-art" src={aetherPath(leftSpecies, 'portrait')} alt="" />}
                       {!a[0] && <span className="home-party-plus">+</span>}
                     </span>
-                    <span className="home-party-name">{a[0] ? SPECIES_META[a[0].species].name : 'OPEN'}</span>
-                    <span className="home-party-role">{a[0] ? 'COMPANION' : 'ADD'}</span>
+                    <span className="home-party-name">{a[0] ? SPECIES_META[a[0].species].name : 'ADD FRIEND'}</span>
+                    <span className="home-party-role">{a[0] ? 'COMPANION' : 'EMPTY SLOT'}</span>
                   </button>
                   <button type="button" className="home-party-slot" onClick={() => onOpen('AETHERLINGS')} aria-label={a[1] ? `Change ${SPECIES_META[a[1].species].name}` : 'Add companion'}>
                     <span className={`home-party-face${a[1] ? '' : ' is-open'}`}>
-                      <PortraitCanvas size={54} className={a[1] ? '' : 'is-empty'} draw={drawRight} />
+                      {rightSpecies && <img className="home-party-art" src={aetherPath(rightSpecies, 'portrait')} alt="" />}
                       {!a[1] && <span className="home-party-plus">+</span>}
                     </span>
-                    <span className="home-party-name">{a[1] ? SPECIES_META[a[1].species].name : 'OPEN'}</span>
-                    <span className="home-party-role">{a[1] ? 'COMPANION' : 'ADD'}</span>
+                    <span className="home-party-name">{a[1] ? SPECIES_META[a[1].species].name : 'ADD FRIEND'}</span>
+                    <span className="home-party-role">{a[1] ? 'COMPANION' : 'EMPTY SLOT'}</span>
                   </button>
                 </div>
               </div>
               <div className="home-stats">
                 <span className="home-chip">HIGH {Math.round(save.settings.highScore).toLocaleString()}</span>
                 <button type="button" className="home-chip" onClick={() => onOpen('SHOP')} aria-label="Open shop">
-                  {assets.has(uiAssets.coin) && <img src={uiAssets.coin} alt="" />}
+                  <img src={uiAssets.coin} alt="" />
                   COINS {Math.round(save.profile.coins).toLocaleString()}
                 </button>
                 <button type="button" className="home-chip" onClick={() => onOpen('SHOP')} aria-label="Open shop">
-                  {assets.has(uiAssets.crystal) && <img src={uiAssets.crystal} alt="" />}
+                  <img src={uiAssets.crystal} alt="" />
                   CRYSTALS {Math.round(save.profile.crystals).toLocaleString()}
                 </button>
                 <button type="button" className="home-chip" onClick={() => onOpen('ACHIEVEMENTS')} aria-label="Open achievements">
-                  {assets.has(uiAssets.trophy) && <img src={uiAssets.trophy} alt="" />}
+                  <img src={uiAssets.trophy} alt="" />
                   TROPHIES {Math.round(save.profile.trophies).toLocaleString()}
                 </button>
                 <button type="button" className="home-chip" onClick={() => onOpen('RAID')} aria-label="Open boss raid">
-                  {assets.has(uiAssets.energy) && <img src={uiAssets.energy} alt="" />}
+                  <img src={uiAssets.energy} alt="" />
                   ENERGY {Math.round(save.profile.bossEnergy).toLocaleString()}
                 </button>
               </div>
@@ -183,14 +149,14 @@ export function Home({ save, notice, onPlay, onOpen, onPop, onLogin }: Props) {
               <button type="button" className="ns-btn ns-btn-primary home-play" onClick={onPlay}>
                 TAKE FLIGHT
               </button>
-              <p className="home-play-hint">Endless sky. Bank coins, crystals, and eggs.</p>
+              <p className="home-play-hint">Drag to steer · Auto-fire · Collect treasure</p>
             </div>
             <div className="home-nav">
               <div className="home-grid">
                 <button type="button" className="ns-btn" onClick={() => onOpen('QUESTS')}>
                   <HomeGlyph kind="scroll" />
                   QUESTS
-                  <small>Send a timer, then claim</small>
+                  <small>Send party · Claim rewards</small>
                 </button>
                 <button type="button" className="ns-btn" onClick={() => onOpen('RAID')}>
                   <HomeGlyph kind="dragon" />
@@ -210,12 +176,13 @@ export function Home({ save, notice, onPlay, onOpen, onPop, onLogin }: Props) {
                 type="button"
                 className={`home-more-toggle${more ? ' is-open' : ''}`}
                 aria-expanded={more}
+                aria-controls="home-extra-options"
                 onClick={() => setMore((open) => !open)}
               >
-                {more ? 'LESS' : 'MORE'}
+                {more ? 'FEWER OPTIONS −' : 'TRAINING, INVENTORY & MORE +'}
               </button>
               {more && (
-                <div className="home-grid home-grid-more">
+                <div id="home-extra-options" className="home-grid home-grid-more">
                   <button type="button" className="ns-btn" onClick={() => onOpen('TRAINING')}>
                     <HomeGlyph kind="sword" />
                     TRAINING

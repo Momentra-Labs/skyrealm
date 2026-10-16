@@ -1,15 +1,14 @@
-import { hangarBootUrls, SKIP_SHEET_URLS } from './assetManifest.ts';
+import { hangarBootUrls } from './assetManifest.ts';
 
 const DEV = import.meta.env.DEV;
 
 export class AssetLoader {
   private readonly images = new Map<string, HTMLImageElement | HTMLCanvasElement>();
+  private readonly silhouettes = new Map<string, HTMLCanvasElement>();
   private readonly failed = new Set<string>();
   private readonly inflight = new Map<string, Promise<void>>();
   private readonly readyFns = new Set<() => void>();
   private readonly progressFns = new Set<() => void>();
-  private readonly chromaQ: Array<{ url: string; img: HTMLImageElement; done: () => void }> = [];
-  private chromaBusy = false;
   private loaded = 0;
   private total = 0;
 
@@ -86,6 +85,28 @@ export class AssetLoader {
     return true;
   }
 
+  drawSilhouette(ctx: CanvasRenderingContext2D, url: string, size: number): boolean {
+    const img = this.images.get(url);
+    if (!img) return false;
+    let silhouette = this.silhouettes.get(url);
+    if (!silhouette) {
+      silhouette = document.createElement('canvas');
+      silhouette.width = img.width;
+      silhouette.height = img.height;
+      const paint = silhouette.getContext('2d');
+      if (!paint) return false;
+      paint.drawImage(img, 0, 0);
+      paint.globalCompositeOperation = 'source-in';
+      paint.fillStyle = '#2a1838';
+      paint.fillRect(0, 0, silhouette.width, silhouette.height);
+      this.silhouettes.set(url, silhouette);
+    }
+    const scale = size / Math.max(silhouette.width, silhouette.height);
+    const w = silhouette.width * scale, h = silhouette.height * scale;
+    ctx.drawImage(silhouette, -w / 2, -h / 2, w, h);
+    return true;
+  }
+
   drawCover(ctx: CanvasRenderingContext2D, url: string, x: number, y: number, w: number, h: number, alpha = 1): boolean {
     const img = this.images.get(url);
     if (!img) return false;
@@ -98,22 +119,13 @@ export class AssetLoader {
 
   private fetchOne(url: string): Promise<void> {
     return new Promise((resolve) => {
-      if (SKIP_SHEET_URLS.has(url)) {
-        this.failed.add(url);
-        this.markLoaded();
-        resolve();
-        return;
-      }
       const img = new Image();
       img.decoding = 'async';
       img.fetchPriority = 'low';
       img.onload = () => {
-        this.markLoaded();
-        if (needsChroma(url)) {
-          this.enqueueChroma(url, img, resolve);
-          return;
-        }
         this.images.set(url, img);
+        this.markLoaded();
+        this.emitReady();
         resolve();
       };
       img.onerror = () => {
@@ -125,59 +137,6 @@ export class AssetLoader {
       img.src = url;
     });
   }
-
-  private enqueueChroma(url: string, img: HTMLImageElement, done: () => void): void {
-    this.chromaQ.push({ url, img, done });
-    this.pumpChroma();
-  }
-
-  private pumpChroma(): void {
-    if (this.chromaBusy) return;
-    if (this.chromaQ.length === 0) return;
-    this.chromaBusy = true;
-    requestAnimationFrame(() => {
-      const batch = this.chromaQ.splice(0, 4);
-      for (const next of batch) {
-        this.images.set(next.url, this.chroma(next.img));
-        next.done();
-      }
-      this.chromaBusy = false;
-      this.pumpChroma();
-    });
-  }
-
-  private chroma(img: HTMLImageElement): HTMLCanvasElement | HTMLImageElement {
-    try {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth || img.width;
-      c.height = img.naturalHeight || img.height;
-      if (c.width < 2 || c.height < 2) return img;
-      const ctx = c.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return img;
-      ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(0, 0, c.width, c.height);
-      const px = data.data;
-      let keyed = 0;
-      for (let i = 0; i < px.length; i += 4) {
-        const r = px[i]!;
-        const g = px[i + 1]!;
-        const b = px[i + 2]!;
-        if (g >= 150 && r <= 110 && b <= 110 && g - r >= 55 && g - b >= 55) {
-          px[i + 3] = 0;
-          keyed += 1;
-        }
-      }
-      if (keyed < 20) return img;
-      ctx.putImageData(data, 0, 0);
-      return c;
-    } catch {
-      return img;
-    }
-  }
-}
-
-function needsChroma(url: string): boolean {
-  return !url.includes('/environments/') && !url.includes('/ui/logo') && !url.includes('/ui/style_bible');
 }
 
 export const assets = new AssetLoader();

@@ -62,15 +62,15 @@ export function MenuPlayground({ onPop }: Props) {
           const bob = Math.sin(age * 6) * 4;
           ctx.save();
           ctx.translate(x - 42, y + 18 + bob);
-          drawAetherSprite(ctx, AetherlingSpecies.FLICKER, 28, { age, pose: 'idle' });
+          drawAetherSprite(ctx, AetherlingSpecies.FLICKER, 28, { age, pose: 'portrait' });
           ctx.restore();
           ctx.save();
           ctx.translate(x + 42, y + 20 - bob);
-          drawAetherSprite(ctx, AetherlingSpecies.TIDECURL, 28, { age: age + 1, pose: 'idle' });
+          drawAetherSprite(ctx, AetherlingSpecies.TIDECURL, 28, { age: age + 1, pose: 'portrait' });
           ctx.restore();
           ctx.save();
           ctx.translate(x, y + bob);
-          drawGuardianSprite(ctx, GuardianId.AURELIA, 52, 'idle');
+          drawGuardianSprite(ctx, GuardianId.AURELIA, 52, 'portrait');
           ctx.restore();
         }
       }

@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "art": "python scripts/art/build_art.py"
   },
   "dependencies": {
     "phaser": "^3.90.0",

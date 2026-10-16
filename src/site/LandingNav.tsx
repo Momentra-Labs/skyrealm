@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { BRAND } from '../brand.ts';
-import { BrandMark } from '../components/BrandMark.tsx';
+import { useEffect, useRef, useState } from 'react';
+import { SkyrealmLogo } from '../components/SkyrealmLogo.tsx';
 
 interface Props {
   onPlay: () => void;
@@ -16,6 +15,20 @@ const LINKS = [
 export function LandingNav({ onPlay }: Props) {
   const [compact, setCompact] = useState(false);
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState('');
+  const headerRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) setActive(`#${entry.target.id}`);
+    }, { rootMargin: '-15% 0px -55% 0px' });
+    for (const link of LINKS) {
+      const section = document.querySelector(link.href);
+      if (section) observer.observe(section);
+    }
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setCompact(window.scrollY > 28);
@@ -27,22 +40,25 @@ export function LandingNav({ onPlay }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') { setOpen(false); toggleRef.current?.focus(); }
+    };
+    const onOutside = (event: PointerEvent) => {
+      if (!headerRef.current?.contains(event.target as Node)) setOpen(false);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onOutside);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', onOutside); };
   }, [open]);
 
   return (
-    <header className={`lp-nav${compact ? ' is-compact' : ''}`}>
+    <header ref={headerRef} className={`lp-nav${compact ? ' is-compact' : ''}`}>
       <div className="lp-nav-inner">
         <a className="lp-nav-brand" href="#top">
-          <BrandMark size={compact ? 32 : 40} />
-          <span>{BRAND.name}</span>
+          <SkyrealmLogo />
         </a>
         <nav className="lp-nav-links" aria-label="Landing">
           {LINKS.map((link) => (
-            <a key={link.href} href={link.href}>
+            <a key={link.href} href={link.href} aria-current={active === link.href ? 'location' : undefined}>
               {link.label}
             </a>
           ))}
@@ -53,6 +69,8 @@ export function LandingNav({ onPlay }: Props) {
         <button
           type="button"
           className="lp-nav-burger"
+          ref={toggleRef}
+          aria-label={open ? 'Close navigation' : 'Open navigation'}
           aria-expanded={open}
           aria-controls="lp-drawer"
           onClick={() => setOpen((v) => !v)}
@@ -60,7 +78,7 @@ export function LandingNav({ onPlay }: Props) {
           {open ? 'CLOSE' : 'MENU'}
         </button>
         {open && (
-          <div id="lp-drawer" className="lp-drawer">
+          <nav id="lp-drawer" className="lp-drawer" aria-label="Mobile navigation">
             {LINKS.map((link) => (
               <a key={link.href} href={link.href} onClick={() => setOpen(false)}>
                 {link.label}
@@ -76,7 +94,7 @@ export function LandingNav({ onPlay }: Props) {
             >
               PLAY NOW
             </button>
-          </div>
+          </nav>
         )}
       </div>
     </header>

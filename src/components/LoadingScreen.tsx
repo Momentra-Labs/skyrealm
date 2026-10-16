@@ -1,57 +1,30 @@
-import { BRAND } from '../brand.ts';
-import { BrandMark } from './BrandMark.tsx';
+import { SkyrealmLogo } from './SkyrealmLogo.tsx';
 
-interface Props {
-  progress: number;
-}
-
-const LORE = [
-  { at: 0, line: 'The isles stir in the morning light…' },
-  { at: 0.22, line: 'Guardians wake upon the wind…' },
-  { at: 0.48, line: 'Aetherlings gather at the gate…' },
-  { at: 0.72, line: 'The old story turns a golden page…' },
-  { at: 0.92, line: 'The Aether opens.' },
-] as const;
-
-function loreFor(progress: number): string {
-  let line: string = LORE[0].line;
-  for (const step of LORE) {
-    if (progress >= step.at) line = step.line;
-  }
-  return line;
-}
-
-export function LoadingScreen({ progress }: Props) {
+export function LoadingScreen({ progress }: { progress: number }) {
   const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+  const status = pct >= 100 ? 'The portal is ready' : pct < 35 ? 'Awakening the skies' : pct < 75 ? 'Gathering your companions' : 'Opening the Aether gate';
   return (
-    <div className="overlay overlay-menu overlay-home">
-      <div className="menu-frame load-gate">
-        <div className="load-sparkles" aria-hidden="true">
-          <span className="load-petal load-petal-a" />
-          <span className="load-petal load-petal-b" />
-          <span className="load-petal load-petal-c" />
-          <span className="load-spark load-spark-a" />
-          <span className="load-spark load-spark-b" />
-          <span className="load-spark load-spark-c" />
-        </div>
-        <div className="load-card">
-          <BrandMark size={108} />
-          <p className="eyebrow">{BRAND.subtitle}</p>
-          <h1 className="title-xl">{BRAND.name}</h1>
-          <p className="load-lore">{loreFor(progress)}</p>
-          <div
-            className="load-well"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={pct}
-            aria-label="Loading"
-          >
-            <div className="load-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="load-pct">{pct}%</p>
-        </div>
+    <div className="aether-loading">
+      <header className="aether-loading-brand"><SkyrealmLogo /><p>GUARDIANS OF THE AETHER</p></header>
+      <div className="aether-portal" aria-hidden="true">
+        <div className="aether-ring outer" /><div className="aether-ring inner" />
+        <span className="aether-sigil north">✧</span><span className="aether-sigil south">✧</span>
+        <span className="aether-sigil east">◇</span><span className="aether-sigil west">◇</span>
+        <svg viewBox="0 0 100 140" className="aether-crystal">
+          <path d="M50 4 86 48 74 105 50 136 26 105 14 48Z" fill="#56cfd7" stroke="#ffe6ab" strokeWidth="2" />
+          <path d="M50 4 38 50 50 136 14 48Z" fill="#c4fff3" />
+          <path d="M50 4 86 48 60 57 50 136Z" fill="#3291b0" />
+          <path d="M38 50 60 57 50 136Z" fill="#8ef2e4" />
+          <path d="m14 48 24 2 22 7 26-9M50 4 38 50 50 136" fill="none" stroke="#ecfff2" strokeOpacity=".7" />
+        </svg>
       </div>
+      <div className="aether-loading-progress">
+        <p className="aether-loading-kicker">YOUR ADVENTURE AWAITS</p>
+        <h1 role="status">{status}</h1>
+        <div className="aether-progress" role="progressbar" aria-label="Preparing your adventure" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><div style={{ width: `${pct}%` }} /></div>
+        <p className="aether-progress-caption"><span>{pct === 100 ? 'Entering your hangar' : 'Preparing your adventure'}</span><strong>{pct}%</strong></p>
+      </div>
+      <p className="aether-loading-tip"><span>✦ FLIGHT TIP ✦</span>Drag to steer. Your guardian fires automatically.<br />Bring companions to strengthen your party.</p>
     </div>
   );
 }
