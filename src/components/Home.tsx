@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { SaveGame } from '../types/game.ts';
+import { EggTier, WorldId } from '../types/game.ts';
 import { GUARDIAN_META } from '../game/content/guardians.ts';
 import { SPECIES_META } from '../game/content/aetherlings.ts';
 import { SkyrealmLogo } from './SkyrealmLogo.tsx';
-import { aetherPath, guardianPath, uiAssets } from '../assets/assetManifest.ts';
+import { aetherPath, eggAssets, envPath, guardianPath, uiAssets } from '../assets/assetManifest.ts';
+import './lobby.css';
 import { web3UiOn } from '../web3/flags.ts';
 
 interface Props {
@@ -78,139 +81,139 @@ function HomeGlyph({ kind }: { kind: GlyphKind }) {
   );
 }
 
+type OpenId = Parameters<Props['onOpen']>[0];
+
+function Badge({ n }: { n: number }) {
+  return n > 0 ? <span className="lobby-badge">{n > 99 ? '99+' : n}</span> : null;
+}
+
 export function Home({ save, notice, onPlay, onOpen, onLogin }: Props) {
   const [more, setMore] = useState(false);
-  const g = GUARDIAN_META[save.equippedGuardian];
-  const a = save.equipped.map((id) => save.aetherlings.find((unit) => unit.id === id));
-  const leftSpecies = a[0]?.species;
-  const rightSpecies = a[1]?.species;
+  const [now] = useState(() => Date.now());
+  const gid = save.equippedGuardian;
+  const g = GUARDIAN_META[gid];
+  const level = save.guardians[gid].level;
+  const pets = save.equipped.map((id) => save.aetherlings.find((unit) => unit.id === id));
+  const eggs = Object.values(save.eggs).reduce((sum, n) => sum + n, 0);
+  const questsReady = save.quests.filter((q) => q.endsAt <= now).length;
+  const giftReady = save.daily.claimed < ((Math.max(1, save.daily.streak) - 1) % 7) + 1;
+  const open = (id: OpenId) => () => onOpen(id);
+
+  const petSlot = (index: 0 | 1) => {
+    const unit = pets[index];
+    const meta = unit ? SPECIES_META[unit.species] : null;
+    return (
+      <button
+        type="button"
+        className={`lobby-pet lobby-pet-${index ? 'right' : 'left'}${unit ? '' : ' is-empty'}`}
+        style={meta ? ({ '--glow': meta.glow } as CSSProperties) : undefined}
+        onClick={open('AETHERLINGS')}
+        aria-label={meta ? `Change ${meta.name}` : 'Add companion'}
+      >
+        <span className="lobby-pet-art">
+          {unit ? <img src={aetherPath(unit.species, 'portrait')} alt="" /> : <span className="lobby-plus">+</span>}
+        </span>
+        <span className="lobby-plate">
+          <strong>{meta ? meta.name : 'EMPTY'}</strong>
+          <small>{unit ? `LV ${unit.level} · ${'★'.repeat(unit.stars)}` : 'Add a companion'}</small>
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div className="overlay overlay-menu overlay-home">
       <div className="menu-frame">
+        <div className="lobby" style={{ '--realm': `url(${envPath(WorldId.CELESTIAL_RUINS, 'bg')})` } as CSSProperties}>
+          <div className="lobby-sky" aria-hidden="true"><i /><i /></div>
 
-        <div className="home-layout">
-          <div className="home-hero">
-            <div className="home-brand-row">
-              <SkyrealmLogo />
-              <span className="home-hangar-label">YOUR HANGAR</span>
-            </div>
-            <div className="home-fly">
-              <div className="home-party-card">
-                <div className="home-party-head">
-                  <p className="home-party-kicker">YOUR PARTY</p>
-                  <p className="home-party-hint">Tap a face to change</p>
-                </div>
-                <div className="home-party">
-                  <button type="button" className="home-party-slot" onClick={() => onOpen('GUARDIANS')} aria-label="Change guardian">
-                    <span className="home-party-face">
-                      <img className="home-party-art" src={guardianPath(save.equippedGuardian, 'portrait')} alt="" />
-                    </span>
-                    <span className="home-party-name">{g.name}</span>
-                    <span className="home-party-role">LV {save.guardians[save.equippedGuardian].level} · GUARDIAN</span>
-                  </button>
-                  <button type="button" className="home-party-slot" onClick={() => onOpen('AETHERLINGS')} aria-label={a[0] ? `Change ${SPECIES_META[a[0].species].name}` : 'Add companion'}>
-                    <span className={`home-party-face${a[0] ? '' : ' is-open'}`}>
-                      {leftSpecies && <img className="home-party-art" src={aetherPath(leftSpecies, 'portrait')} alt="" />}
-                      {!a[0] && <span className="home-party-plus">+</span>}
-                    </span>
-                    <span className="home-party-name">{a[0] ? SPECIES_META[a[0].species].name : 'ADD FRIEND'}</span>
-                    <span className="home-party-role">{a[0] ? 'COMPANION' : 'EMPTY SLOT'}</span>
-                  </button>
-                  <button type="button" className="home-party-slot" onClick={() => onOpen('AETHERLINGS')} aria-label={a[1] ? `Change ${SPECIES_META[a[1].species].name}` : 'Add companion'}>
-                    <span className={`home-party-face${a[1] ? '' : ' is-open'}`}>
-                      {rightSpecies && <img className="home-party-art" src={aetherPath(rightSpecies, 'portrait')} alt="" />}
-                      {!a[1] && <span className="home-party-plus">+</span>}
-                    </span>
-                    <span className="home-party-name">{a[1] ? SPECIES_META[a[1].species].name : 'ADD FRIEND'}</span>
-                    <span className="home-party-role">{a[1] ? 'COMPANION' : 'EMPTY SLOT'}</span>
-                  </button>
-                </div>
-              </div>
-              <div className="home-stats">
-                <span className="home-chip">HIGH {Math.round(save.settings.highScore).toLocaleString()}</span>
-                <button type="button" className="home-chip" onClick={() => onOpen('SHOP')} aria-label="Open shop">
-                  <img src={uiAssets.coin} alt="" />
-                  COINS {Math.round(save.profile.coins).toLocaleString()}
-                </button>
-                <button type="button" className="home-chip" onClick={() => onOpen('SHOP')} aria-label="Open shop">
-                  <img src={uiAssets.crystal} alt="" />
-                  CRYSTALS {Math.round(save.profile.crystals).toLocaleString()}
-                </button>
-                <button type="button" className="home-chip" onClick={() => onOpen('ACHIEVEMENTS')} aria-label="Open achievements">
-                  <img src={uiAssets.trophy} alt="" />
-                  TROPHIES {Math.round(save.profile.trophies).toLocaleString()}
-                </button>
-                <button type="button" className="home-chip" onClick={() => onOpen('RAID')} aria-label="Open boss raid">
-                  <img src={uiAssets.energy} alt="" />
-                  ENERGY {Math.round(save.profile.bossEnergy).toLocaleString()}
-                </button>
-              </div>
-              {notice && <p className="hangar-note">{notice}</p>}
-              <button type="button" className="ns-btn ns-btn-primary home-play" onClick={onPlay}>
-                TAKE FLIGHT
+          <header className="lobby-top">
+            <button type="button" className="lobby-profile" onClick={open('GUARDIANS')} aria-label="Open guardian hall">
+              <span className="lobby-avatar"><img src={guardianPath(gid, 'icon')} alt="" /><b>{level}</b></span>
+              <span className="lobby-profile-text">
+                <strong>{g.name}</strong>
+                <small>BEST {Math.round(save.settings.highScore).toLocaleString()}</small>
+              </span>
+            </button>
+            <div className="lobby-wallet">
+              <button type="button" className="lobby-cur" onClick={open('SHOP')} aria-label={`Coins ${Math.round(save.profile.coins)}, open shop`}>
+                <img src={uiAssets.coin} alt="" /><span>{Math.round(save.profile.coins).toLocaleString()}</span><i>+</i>
               </button>
-              <p className="home-play-hint">Drag to steer · Auto-fire · Collect treasure</p>
-            </div>
-            <div className="home-nav">
-              <div className="home-grid">
-                <button type="button" className="ns-btn" onClick={() => onOpen('QUESTS')}>
-                  <HomeGlyph kind="scroll" />
-                  QUESTS
-                  <small>Send party · Claim rewards</small>
-                </button>
-                <button type="button" className="ns-btn" onClick={() => onOpen('RAID')}>
-                  <HomeGlyph kind="dragon" />
-                  BOSS RAID
-                  <small>Spend 1 Boss Energy</small>
-                </button>
-                <button type="button" className="ns-btn" onClick={() => onOpen('EGGS')}>
-                  <HomeGlyph kind="egg" />
-                  EGGS
-                </button>
-                <button type="button" className="ns-btn" onClick={() => onOpen('SHOP')}>
-                  <HomeGlyph kind="pouch" />
-                  SHOP
-                </button>
-              </div>
-              <button
-                type="button"
-                className={`home-more-toggle${more ? ' is-open' : ''}`}
-                aria-expanded={more}
-                aria-controls="home-extra-options"
-                onClick={() => setMore((open) => !open)}
-              >
-                {more ? 'FEWER OPTIONS −' : 'TRAINING, INVENTORY & MORE +'}
+              <button type="button" className="lobby-cur is-gem" onClick={open('SHOP')} aria-label={`Crystals ${Math.round(save.profile.crystals)}, open shop`}>
+                <img src={uiAssets.crystal} alt="" /><span>{Math.round(save.profile.crystals).toLocaleString()}</span><i>+</i>
               </button>
-              {more && (
-                <div id="home-extra-options" className="home-grid home-grid-more">
-                  <button type="button" className="ns-btn" onClick={() => onOpen('TRAINING')}>
-                    <HomeGlyph kind="sword" />
-                    TRAINING
-                    <small>Practice. No spoils.</small>
-                  </button>
-                  <button type="button" className="ns-btn" onClick={() => onOpen('INVENTORY')}>
-                    <HomeGlyph kind="satchel" />
-                    INVENTORY
-                  </button>
-                  <button type="button" className="ns-btn" onClick={() => onOpen('ACHIEVEMENTS')}>
-                    <HomeGlyph kind="star" />
-                    ACHIEVEMENTS
-                  </button>
-                  {web3UiOn() && (
-                    <button type="button" className="ns-btn" onClick={() => onOpen('COLLECTION')}>
-                      <HomeGlyph kind="gem" />
-                      COLLECTION
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
-            <nav className="home-help" aria-label="Help">
-              <button type="button" className="home-text-link" onClick={() => onOpen('HOW_TO_PLAY')}>HOW TO PLAY</button>
-              <button type="button" className="home-text-link" onClick={() => onOpen('SETTINGS')}>SETTINGS</button>
-              <button type="button" className="home-text-link" onClick={onLogin}>DAILY LOGIN</button>
-            </nav>
+          </header>
+
+          <div className="lobby-side" aria-label="Quick menu">
+            <button type="button" className="lobby-round" onClick={onLogin} aria-label="Daily login reward">
+              <HomeGlyph kind="star" />{giftReady && <span className="lobby-dot" />}
+              <small>DAILY</small>
+            </button>
+            <button type="button" className="lobby-round" onClick={open('ACHIEVEMENTS')} aria-label="Achievements">
+              <img src={uiAssets.trophy} alt="" /><small>{Math.round(save.profile.trophies)}</small>
+            </button>
+            <button type="button" className="lobby-round" onClick={open('SETTINGS')} aria-label="Settings">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)" /></svg>
+              <small>SETUP</small>
+            </button>
+            <button type="button" className="lobby-round" onClick={open('HOW_TO_PLAY')} aria-label="How to play">
+              <b>?</b><small>HELP</small>
+            </button>
           </div>
+
+          <section className="lobby-stage" aria-label="Your party">
+            <div className="lobby-brand"><SkyrealmLogo /></div>
+            <div className="lobby-portal" aria-hidden="true"><i /><i /></div>
+            <div className="lobby-pedestal" aria-hidden="true" />
+            <button type="button" className="lobby-hero" onClick={open('GUARDIANS')} aria-label={`Change guardian, ${g.name} equipped`}>
+              <img src={guardianPath(gid, 'portrait')} alt="" />
+            </button>
+            {petSlot(0)}
+            {petSlot(1)}
+            <div className="lobby-nameplate">
+              <span className={`lobby-rarity r-${g.rarity.toLowerCase()}`}>{g.rarity}</span>
+              <strong>{g.name}</strong>
+              <small>{g.title} · LV {level}</small>
+            </div>
+          </section>
+
+          {notice && <p className="lobby-notice" role="status">{notice}</p>}
+
+          <section className="lobby-modes" aria-label="Play">
+            <button type="button" className="lobby-raid" onClick={open('RAID')}>
+              <HomeGlyph kind="dragon" />
+              <span><strong>BOSS RAID</strong><small><img src={uiAssets.energy} alt="" />{Math.round(save.profile.bossEnergy)} energy</small></span>
+            </button>
+            <button type="button" className="lobby-fly" onClick={onPlay}>
+              <span className="lobby-fly-mode">ENDLESS FLIGHT</span>
+              <strong>TAKE FLIGHT</strong>
+            </button>
+            <button type="button" className="lobby-raid" onClick={open('TRAINING')}>
+              <HomeGlyph kind="sword" />
+              <span><strong>TRAINING</strong><small>Practice run</small></span>
+            </button>
+          </section>
+
+          {more && (
+            <div id="lobby-more" className="lobby-more">
+              <button type="button" onClick={open('INVENTORY')}><HomeGlyph kind="satchel" />INVENTORY</button>
+              <button type="button" onClick={open('ACHIEVEMENTS')}><HomeGlyph kind="star" />ACHIEVEMENTS</button>
+              {web3UiOn() && <button type="button" onClick={open('COLLECTION')}><HomeGlyph kind="gem" />COLLECTION</button>}
+              <button type="button" onClick={open('HOW_TO_PLAY')}><b>?</b>HOW TO PLAY</button>
+            </div>
+          )}
+
+          <nav className="lobby-dock" aria-label="Hangar">
+            <button type="button" onClick={open('GUARDIANS')}><img src={guardianPath(gid, 'icon')} alt="" /><span>HEROES</span></button>
+            <button type="button" onClick={open('AETHERLINGS')}><HomeGlyph kind="dragon" /><span>PETS</span></button>
+            <button type="button" onClick={open('QUESTS')}><HomeGlyph kind="scroll" /><span>QUESTS</span><Badge n={questsReady} /></button>
+            <button type="button" onClick={open('EGGS')}><img src={eggAssets[EggTier.EPIC]} alt="" /><span>EGGS</span><Badge n={eggs} /></button>
+            <button type="button" onClick={open('SHOP')}><HomeGlyph kind="pouch" /><span>SHOP</span></button>
+            <button type="button" className={more ? 'is-on' : ''} aria-expanded={more} aria-controls="lobby-more" onClick={() => setMore((v) => !v)}>
+              <b className="lobby-more-ico">{more ? '×' : '⋯'}</b><span>MORE</span>
+            </button>
+          </nav>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import type { HazardStyle } from '../content/hazards.ts';
 import { PICKUP_FLASH, pickupStyle } from '../content/pickups.ts';
 import { ELEMENT_COLOR } from '../content/elements.ts';
 import { SPECIES_META } from '../content/aetherlings.ts';
+import { BOSS_META } from '../content/bosses.ts';
 import { GUARDIAN_COLORS, guardianShotSpins, monsterShotSpins, spellSpins } from '../fantasyDraw.ts';
 import type { GameEngine } from '../GameEngine.ts';
 import type { TextureBank } from './TextureBank.ts';
@@ -36,6 +37,41 @@ const VIEW = {
 /** Seconds a foe takes to pop in, and the wind-up window before it fires. */
 const SPAWN_POP = 0.24;
 const WINDUP = 0.34;
+/** Bosses wind up longer so a signature move is readable before it lands. */
+const BOSS_WINDUP = 0.6;
+/** Soft radial bloom laid additively under every shot. */
+const GLOW_KEY = 'fx-glow';
+
+function ensureGlow(scene: Phaser.Scene): void {
+  if (scene.textures.exists(GLOW_KEY)) return;
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.14)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  scene.textures.addCanvas(GLOW_KEY, canvas);
+}
+
+function rgbTint(rgb: readonly [number, number, number]): number {
+  return (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+}
+
+function glow(img: Phaser.GameObjects.Image, x: number, y: number, size: number, tint: number, alpha: number): void {
+  img.setVisible(true);
+  img.setPosition(x, y);
+  img.setDisplaySize(size, size);
+  img.setTint(tint);
+  img.setAlpha(alpha);
+}
 /** hitFlash runs 0.08s per hit; only its first frames flash white. */
 const HIT_WHITE = 0.05;
 
@@ -95,6 +131,8 @@ export class SpriteSync {
   private readonly shots: ImagePool;
   private readonly exhausts: ImagePool;
   private readonly bullets: ImagePool;
+  private readonly bulletGlows: ImagePool;
+  private readonly shotGlows: ImagePool;
   private readonly tokens: ImagePool;
   private readonly pickups: ImagePool;
   private readonly coins: ImagePool;
@@ -124,6 +162,9 @@ export class SpriteSync {
     this.shots = new ImagePool(scene, DEPTH.eShot);
     this.exhausts = new ImagePool(scene, DEPTH.exhaust);
     this.bullets = new ImagePool(scene, DEPTH.bullet);
+    ensureGlow(scene);
+    this.bulletGlows = new ImagePool(scene, DEPTH.exhaust - 0.5, true);
+    this.shotGlows = new ImagePool(scene, DEPTH.eWake - 0.5, true);
     this.tokens = new ImagePool(scene, DEPTH.token);
     this.pickups = new ImagePool(scene, DEPTH.pickup);
     this.coins = new ImagePool(scene, DEPTH.coin);
@@ -203,25 +244,38 @@ export class SpriteSync {
       const bob = Math.sin(b.age * 4) * 5;
       const pulse = 1 + Math.sin(b.age * 6) * 0.025;
       const tilt = Math.sin(b.age * 1.6) * 0.035;
-      const pose: Pose = !b.alive ? 'death' : b.hitFlash > 0 ? 'hit' : b.fireCd < 0.2 ? 'attack' : 'idle';
+      const attacking = b.casting() || b.fireCd < 0.2;
+      const pose: Pose = !b.alive ? 'death' : b.hitFlash > 0 ? 'hit' : attacking ? 'attack' : 'idle';
       const size = Math.min(VIEW.bossMax, b.radius * VIEW.boss);
       // Gentle hit tint preserves the boss silhouette during sustained fire;
       // the separate charge marker stays visible above it.
-      const shown: Pose = pose === 'hit' ? (b.fireCd < 0.2 ? 'attack' : 'idle') : pose;
+      const shown: Pose = pose === 'hit' ? (attacking ? 'attack' : 'idle') : pose;
       place(this.boss, this.bank, this.bank.boss(b.kind, shown), b.x, b.y + bob, size, {
         rot: tilt,
         sx: scale.sx * pulse,
         sy: scale.sy * pulse,
         tint: b.hitFlash > HIT_WHITE ? 0xffe2e2 : undefined,
       });
-      const charge = b.alive && b.intro <= 0 && b.fireCd > 0 && b.fireCd < WINDUP ? 1 - b.fireCd / WINDUP : 0;
-      if (charge > 0) chargeCue(this.threatCues, b.x, b.y + bob + size * 0.3, charge, 19);
+      const charge = b.alive && b.intro <= 0 && !b.casting() && b.fireCd > 0 && b.fireCd < BOSS_WINDUP ? 1 - b.fireCd / BOSS_WINDUP : 0;
+      if (charge > 0) {
+        // A widening element-coloured aura gathers around the boss as it charges.
+        const el = monsterRgb(BOSS_META[b.kind].element).rim;
+        this.threatCues.lineStyle(4, rgbTint(el), 0.25 + charge * 0.55);
+        this.threatCues.strokeCircle(b.x, b.y + bob, size * (0.62 - charge * 0.14));
+        this.threatCues.lineStyle(2, 0xffffff, charge * 0.6);
+        this.threatCues.strokeCircle(b.x, b.y + bob, size * (0.5 - charge * 0.1));
+        chargeCue(this.threatCues, b.x, b.y + bob + size * 0.3, charge, 22);
+      }
       this.casts.push({ x: b.x, y: b.y + bob + size * 0.36, size });
     } else {
       this.boss.setVisible(false);
     }
     // Torn wake dragged behind monster fire, laid along the reverse of travel so
     // a shot tells you where it came from as well as where it is headed.
+    this.shotGlows.sync(e.enemyShots, (img, shot) => {
+      const flicker = 0.85 + Math.sin(shot.life * 30) * 0.15;
+      glow(img, shot.x, shot.y, enemyShotSize(shot) * 2.2, rgbTint(monsterRgb(shot.element).rim), 0.5 * flicker);
+    });
     this.eWakes.sync(e.enemyShots, (img, shot) => {
       const back = Math.atan2(-shot.vy, -shot.vx);
       const len = enemyShotSize(shot) * 1.65;
@@ -251,6 +305,12 @@ export class SpriteSync {
     // Streak behind each signature shot, laid along the reverse of travel. The
     // hero's is kept shorter and fainter than a companion's, because at high
     // weapon levels a dozen full-length comet tails turn the screen to soup.
+    this.bulletGlows.sync(e.bullets, (img, bullet) => {
+      const hero = bullet.source === 'player';
+      const flicker = 0.88 + Math.sin(bullet.life * 34) * 0.12;
+      const base = hero ? (bullet.crit ? 0.6 : 0.38) : 0.36;
+      glow(img, bullet.x, bullet.y, bulletSize(bullet) * (bullet.crit ? 1.9 : 1.55), hexToTint(bullet.style.glowColor), base * flicker);
+    });
     this.exhausts.sync(e.bullets, (img, bullet) => {
       const spell = bullet.kind === 'spell';
       if (!spell && !bullet.guardian) {
@@ -532,16 +592,20 @@ export class SpriteSync {
 class ImagePool {
   private readonly scene: Phaser.Scene;
   private readonly depth: number;
+  private readonly additive: boolean;
   private readonly sprites: Phaser.GameObjects.Image[] = [];
 
-  constructor(scene: Phaser.Scene, depth: number) {
+  constructor(scene: Phaser.Scene, depth: number, additive = false) {
     this.scene = scene;
     this.depth = depth;
+    this.additive = additive;
   }
 
   sync<T>(items: readonly T[], apply: (img: Phaser.GameObjects.Image, item: T, i: number) => void): void {
     while (this.sprites.length < items.length) {
-      this.sprites.push(this.scene.add.image(0, 0, 'dot').setDepth(this.depth).setVisible(false));
+      const img = this.scene.add.image(0, 0, this.additive ? GLOW_KEY : 'dot').setDepth(this.depth).setVisible(false);
+      if (this.additive) img.setBlendMode(Phaser.BlendModes.ADD);
+      this.sprites.push(img);
     }
     for (let i = 0; i < this.sprites.length; i++) {
       const img = this.sprites[i]!;
@@ -640,7 +704,7 @@ function placeWake(
 function bulletSize(bullet: Bullet): number {
   // Signature shots get extra room: their detail only reads once the sprite is
   // bigger than the plain bolt that shares its hitbox.
-  const reach = bullet.kind === 'spell' || bullet.guardian ? 9.4 : 7.2;
+  const reach = bullet.guardian ? 10.2 : bullet.kind === 'spell' ? 9.8 : 7.2;
   return Math.max(VIEW.playerShot, bullet.radius * reach) * bullet.style.coreScale;
 }
 

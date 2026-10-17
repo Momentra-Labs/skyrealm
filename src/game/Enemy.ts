@@ -32,12 +32,17 @@ export class Enemy {
   linger = 0;
   holdX = 750;
   element: El = ElementId.ARCANE;
+  /** Follow-up shots left in the current burst, and the gap before the next. */
+  burst = 0;
+  burstCd = 0;
 
   spawn(type: EnemyTypeT, laneX: number, hpScale: number, speedScale: number): void {
     this.type = type;
     this.x = laneX;
     this.y = -28;
     this.age = 0;
+    this.burst = 0;
+    this.burstCd = 0;
     this.phase = randRange(0, Math.PI * 2);
     this.hitFlash = 0;
     this.alive = true;
@@ -298,39 +303,107 @@ export class Enemy {
     projSpeed: number,
     onMuzzle?: MuzzleCue,
   ): void {
+    if (this.ally) return;
+    const T = EnemyType;
+    const t = this.type;
     if (
-      this.ally ||
-      (this.type !== EnemyType.DRONE &&
-        this.type !== EnemyType.TANK &&
-        this.type !== EnemyType.MAGE &&
-        this.type !== EnemyType.BOMBER &&
-        this.type !== EnemyType.FLYER &&
-        this.type !== EnemyType.ELITE &&
-        this.type !== EnemyType.MINI_BOSS &&
-        this.type !== EnemyType.FROST_GOBLIN &&
-        this.type !== EnemyType.CRYSTAL_GOLEM)
+      t !== T.DRONE && t !== T.TANK && t !== T.MAGE && t !== T.BOMBER && t !== T.FLYER &&
+      t !== T.ELITE && t !== T.MINI_BOSS && t !== T.FROST_GOBLIN && t !== T.CRYSTAL_GOLEM
     )
       return;
+    // Follow-up shots of a burst ride their own short clock.
+    if (this.burst > 0) {
+      this.burstCd -= dt;
+      if (this.burstCd <= 0) {
+        this.burst -= 1;
+        this.burstCd = t === T.MAGE ? 0.16 : 0.11;
+        const a = this.aimAt(player, t === T.FLYER ? 240 : 215);
+        this.emit(projectiles, pool, a.vx, a.vy, ProjectileKind.STRAIGHT, 10, projSpeed);
+        onMuzzle?.(this.x, this.y + this.radius, a.vx, a.vy, this.element);
+      }
+    }
     this.fireCd -= dt;
     if (this.fireCd > 0) return;
-    this.fireCd = this.type === EnemyType.TANK ? 1.15 : 1.35;
-    // Aim of the volley, kept so the muzzle can flash once for the whole burst
-    // rather than stacking three overlapping bursts on a tank's barrel.
-    let aimX = 0;
-    let aimY = 220;
-    if (this.type === EnemyType.TANK) {
-      this.emit(projectiles, pool, -80, 190, ProjectileKind.SPREAD, 12, projSpeed);
-      this.emit(projectiles, pool, 0, 220, ProjectileKind.STRAIGHT, 14, projSpeed);
-      this.emit(projectiles, pool, 80, 190, ProjectileKind.SPREAD, 12, projSpeed);
-    } else {
-      const dx = player.x - this.x;
-      const dy = player.y + player.vy * 0.12 - this.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      aimX = (dx / dist) * 200;
-      aimY = (dy / dist) * 200;
-      this.emit(projectiles, pool, aimX, aimY, ProjectileKind.STRAIGHT, 12, projSpeed);
+    // Each foe has its own attack, so a wave reads as a mix of threats rather
+    // than a wall of identical pellets.
+    this.fireCd = t === T.TANK ? 1.35 : t === T.ELITE || t === T.MINI_BOSS ? 1.6 : t === T.BOMBER ? 1.9 : t === T.CRYSTAL_GOLEM ? 1.8 : 1.45;
+    let a = this.aimAt(player, 200);
+    switch (t) {
+      case T.TANK: // Cannon spread: three heavy shells.
+        this.emit(projectiles, pool, -80, 190, ProjectileKind.SPREAD, 12, projSpeed);
+        this.emit(projectiles, pool, 0, 220, ProjectileKind.PLASMA, 14, projSpeed);
+        this.emit(projectiles, pool, 80, 190, ProjectileKind.SPREAD, 12, projSpeed);
+        a = { vx: 0, vy: 220 };
+        break;
+      case T.MAGE: // Hex burst: an aimed bolt, two follow-ups, and a seeking eye.
+        this.emit(projectiles, pool, a.vx, a.vy, ProjectileKind.STRAIGHT, 10, projSpeed);
+        this.emit(projectiles, pool, a.vx * 0.55, a.vy * 0.55, ProjectileKind.HOMING, 11, projSpeed);
+        this.burst = 2;
+        this.burstCd = 0.16;
+        break;
+      case T.FLYER: // Quick double tap.
+        a = this.aimAt(player, 240);
+        this.emit(projectiles, pool, a.vx, a.vy, ProjectileKind.STRAIGHT, 10, projSpeed);
+        this.burst = 1;
+        this.burstCd = 0.11;
+        break;
+      case T.BOMBER: // Carpet bomb: a slow ring of six.
+        for (let i = 0; i < 6; i++) {
+          const ang = (Math.PI * 2 * i) / 6 + this.age;
+          this.emit(projectiles, pool, Math.cos(ang) * 120, Math.sin(ang) * 120 + 60, ProjectileKind.PLASMA, 11, projSpeed);
+        }
+        a = { vx: 0, vy: 160 };
+        break;
+      case T.ELITE: // Five-way fan aimed at the hero.
+        this.fan(projectiles, pool, a, 5, 0.22, ProjectileKind.SPREAD, 11, projSpeed);
+        break;
+      case T.MINI_BOSS: // Ring burst, then an aimed missile.
+        for (let i = 0; i < 10; i++) {
+          const ang = (Math.PI * 2 * i) / 10 + this.age * 0.7;
+          this.emit(projectiles, pool, Math.cos(ang) * 135, Math.sin(ang) * 135, ProjectileKind.STRAIGHT, 11, projSpeed);
+        }
+        this.emit(projectiles, pool, a.vx * 1.1, a.vy * 1.1, ProjectileKind.MISSILE, 13, projSpeed);
+        break;
+      case T.FROST_GOBLIN: // Icicle trio: narrow and fast.
+        a = this.aimAt(player, 260);
+        this.fan(projectiles, pool, a, 3, 0.12, ProjectileKind.STRAIGHT, 10, projSpeed);
+        break;
+      case T.CRYSTAL_GOLEM: // Boulder lob flanked by two shards.
+        a = this.aimAt(player, 150);
+        this.emit(projectiles, pool, a.vx, a.vy, ProjectileKind.PLASMA, 15, projSpeed);
+        this.fan(projectiles, pool, this.aimAt(player, 230), 2, 0.45, ProjectileKind.SPREAD, 10, projSpeed);
+        break;
+      default: // Drone: one aimed shot.
+        this.emit(projectiles, pool, a.vx, a.vy, ProjectileKind.STRAIGHT, 12, projSpeed);
     }
-    onMuzzle?.(this.x, this.y + this.radius, aimX, aimY, this.element);
+    onMuzzle?.(this.x, this.y + this.radius, a.vx, a.vy, this.element);
+  }
+
+  /** Velocity toward where the hero is about to be. */
+  private aimAt(player: Player, speed: number): { vx: number; vy: number } {
+    const dx = player.x - this.x;
+    const dy = player.y + player.vy * 0.12 - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    return { vx: (dx / dist) * speed, vy: (dy / dist) * speed };
+  }
+
+  /** `count` shots spread evenly across `step` radians either side of `aim`. */
+  private fan(
+    projectiles: EnemyProjectile[],
+    pool: ObjectPool<EnemyProjectile>,
+    aim: { vx: number; vy: number },
+    count: number,
+    step: number,
+    kind: ProjectileKind,
+    damage: number,
+    projSpeed: number,
+  ): void {
+    const base = Math.atan2(aim.vy, aim.vx);
+    const speed = Math.hypot(aim.vx, aim.vy);
+    for (let i = 0; i < count; i++) {
+      const ang = base + (i - (count - 1) / 2) * step;
+      this.emit(projectiles, pool, Math.cos(ang) * speed, Math.sin(ang) * speed, kind, damage, projSpeed);
+    }
   }
 
   private emit(

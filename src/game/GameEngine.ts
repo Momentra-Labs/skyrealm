@@ -54,7 +54,7 @@ import { foeAura } from './content/foeArt.ts';
 import { elementMult, weaknessOf } from './content/elements.ts';
 import { SKY, skyShell } from './content/skies.ts';
 import { VFXManager } from './vfx/VFXManager.ts';
-import { guardianShotStyle } from './vfx/projectileStyle.ts';
+import { guardianShotStyle, monsterRgb } from './vfx/projectileStyle.ts';
 import { EggTier } from '../types/game.ts';
 import { assets } from '../assets/AssetLoader.ts';
 import { combatPackUrls, guardianPath, speciesAssetUrls, worldAssetUrls } from '../assets/assetManifest.ts';
@@ -539,7 +539,7 @@ export class GameEngine {
       const b = this.bullets[i]!;
       // Each guided shot picks its own nearest foe, so a volley fans out over the
       // field instead of every spell piling onto the one target closest to the hero.
-      const aim = b.homing ? this.nearestTo(b.x, b.y) : null;
+      const aim = b.seeks() ? this.nearestTo(b.x, b.y) : null;
       if (!b.update(dt, aim?.x, aim?.y)) this.releaseBullet(i);
     }
     for (let i = this.enemyShots.length - 1; i >= 0; i--) {
@@ -627,25 +627,32 @@ export class GameEngine {
       let hitBoss = false;
       for (let j = this.enemies.length - 1; j >= 0; j--) {
         const e = this.enemies[j]!;
-        if (!this.collision.bulletHitsEnemy(b, e)) continue;
+        if (e === b.lastHit || !this.collision.bulletHitsEnemy(b, e)) continue;
         hit = true;
+        b.lastHit = e;
         this.score.shotsHit += 1;
         const from = this.shotElement();
         const dmg = b.damage * elementMult(from, e.element);
+        const ex = e.x;
+        const ey = e.y;
         const killed = e.hurt(dmg);
-        this.floats.spawn(e.x, e.y - 8, `${Math.round(dmg)}`, dmg > b.damage * 1.2 ? '#ffd24a' : '#fff', dmg > b.damage * 1.2 ? 18 : 13);
+        this.floats.spawn(ex, ey - 8, `${Math.round(dmg)}`, b.crit || dmg > b.damage * 1.2 ? '#ffd24a' : '#fff', b.crit ? 20 : dmg > b.damage * 1.2 ? 18 : 13);
         this.audio.play('hit');
         if (killed) this.killEnemy(j);
+        if (b.splash > 0) this.splashAt(ex, ey, b.splash, b.damage * 0.6, e, b.style.particleColor);
         break;
       }
-      if (!hit && this.boss?.alive && this.collision.bulletHitsBoss(b, this.boss)) {
+      if (!hit && this.boss?.alive && b.lastHit !== this.boss && this.collision.bulletHitsBoss(b, this.boss)) {
+        b.lastHit = this.boss;
         hit = true;
         hitBoss = true;
         this.score.shotsHit += 1;
         const from = this.shotElement();
         const dmg = b.damage * elementMult(from, BOSS_META[this.boss.kind].element);
         const slain = this.boss.hurt(dmg);
-        this.floats.spawn(b.x, b.y, `${Math.round(dmg)}`, '#ffe08a', 16);
+        this.floats.spawn(b.x, b.y, `${Math.round(dmg)}`, b.crit ? '#ffd24a' : '#ffe08a', b.crit ? 21 : 16);
+        if (b.crit) this.shake.trigger(0.06);
+        if (b.splash > 0 && !slain) this.splashAt(b.x, b.y, b.splash, b.damage * 0.6, this.boss, b.style.particleColor);
         this.audio.play('hit');
         if (slain) this.killBoss();
       }
@@ -748,6 +755,20 @@ export class GameEngine {
     }
   }
 
+  /** Orion's orb burst: a shockwave that clips every other foe in reach. */
+  private splashAt(x: number, y: number, radius: number, damage: number, skip: object, color: readonly [number, number, number]): void {
+    if (this.settings.particlesEnabled) {
+      ringTo(this.particles, x, y, color, 6, radius * 1.15, 0.28);
+      ringTo(this.particles, x, y, [255, 255, 250], 4, radius * 0.7, 0.18);
+    }
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i]!;
+      if (e === skip || Math.hypot(e.x - x, e.y - y) > radius + e.radius) continue;
+      this.floats.spawn(e.x, e.y - 8, `${Math.round(damage)}`, '#ff9ad4', 12);
+      if (e.hurt(damage)) this.killEnemy(i);
+    }
+  }
+
   private killEnemy(index: number): void {
     const e = this.enemies[index]!;
     this.score.registerKill();
@@ -755,6 +776,8 @@ export class GameEngine {
     this.player.addEnergy(PLAYER.energyPerKill);
     this.player.reactGrin();
     this.audio.play('explode');
+    // Heavy foes land with a thump.
+    if (e.type === EnemyType.ELITE || e.type === EnemyType.MINI_BOSS || e.type === EnemyType.CRYSTAL_GOLEM || e.type === EnemyType.TANK) this.shake.trigger(0.14);
     this.dropCoins(e.x, e.y, e.type === EnemyType.LOOT_CRATE ? 8 : e.type === EnemyType.ELITE ? 5 : 2);
     if (e.type === EnemyType.LOOT_CRATE) {
       this.runCrystals += randInt(2, 6);
@@ -797,6 +820,24 @@ export class GameEngine {
     this.lastBossDamage = this.boss.damageTaken;
     this.audio.play('bossExplode');
     this.floats.spawn(this.boss.x, this.boss.y, 'FELLED', '#ffd24a', 26);
+    this.shake.trigger(0.9);
+    if (this.settings.particlesEnabled) {
+      // A chain of blasts across the body, then one huge shockwave.
+      const bx = this.boss.x;
+      const by = this.boss.y;
+      const r = this.boss.radius;
+      const aura = monsterRgb(BOSS_META[this.boss.kind].element).rim;
+      for (let n = 0; n < 6; n++) {
+        const ang = (Math.PI * 2 * n) / 6;
+        const x = bx + Math.cos(ang) * r * 0.7;
+        const y = by + Math.sin(ang) * r * 0.7;
+        this.particles.puff(x, y, aura);
+        this.particles.burstStars(x, y, 10, aura);
+      }
+      ringTo(this.particles, bx, by, [255, 255, 250], r, r * 5, 0.5);
+      ringTo(this.particles, bx, by, aura, r * 0.8, r * 4, 0.7);
+      this.particles.burstStars(bx, by, 24, [255, 224, 138]);
+    }
     this.boss = null;
     if (this.mode === RunMode.RAID) {
       this.state = GameState.VICTORY;

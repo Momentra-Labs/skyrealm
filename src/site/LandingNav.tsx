@@ -7,9 +7,11 @@ interface Props {
 
 const LINKS = [
   { href: '#guardians', label: 'GUARDIANS' },
-  { href: '#rewards', label: 'TREASURES' },
-  { href: '#world', label: 'WORLD' },
-  { href: '#how-to-play', label: 'HOW TO PLAY' },
+  { href: '#aetherlings', label: 'AETHERLINGS' },
+  { href: '#bosses', label: 'BOSSES' },
+  { href: '#world', label: 'REALMS' },
+  { href: '#earn', label: 'EARN' },
+  { href: '#how-to-play', label: 'FAQ' },
 ] as const;
 
 export function LandingNav({ onPlay }: Props) {
@@ -63,7 +65,7 @@ export function LandingNav({ onPlay }: Props) {
             </a>
           ))}
         </nav>
-        <button type="button" className="lp-btn lp-btn-gold lp-nav-play" onClick={onPlay}>
+        <button type="button" className="lp-btn lp-btn-play sm lp-nav-play" onClick={onPlay}>
           PLAY NOW
         </button>
         <button
@@ -86,7 +88,7 @@ export function LandingNav({ onPlay }: Props) {
             ))}
             <button
               type="button"
-              className="lp-btn lp-btn-gold lp-nav-play"
+              className="lp-btn lp-btn-play sm lp-nav-play"
               onClick={() => {
                 setOpen(false);
                 onPlay();
